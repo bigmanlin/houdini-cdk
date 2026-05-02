@@ -1,0 +1,44 @@
+{
+  "name": "houdini-cdk",
+  "version": "1.0.0",
+  "description": "Houdini CDK",
+  "main": "index.js",
+  "scripts": {
+    "lint": "eslint 'lib/**/*.ts'",
+    "build": "npm run lint && tsc && jest && cdk synth",
+    "watch": "tsc -w",
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "diff": "cdk diff",
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bigmanlin/houdini-cdk.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/bigmanlin/houdini-cdk/issues"
+  },
+  "homepage": "https://github.com/bigmanlin/houdini-cdk#readme",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.6.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.1",
+    "@typescript-eslint/parser": "^8.59.1",
+    "aws-cdk": "^2.1120.0",
+    "aws-cdk-lib": "^2.252.0",
+    "constructs": "^10.6.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-import": "^2.32.0",
+    "jest": "^30.3.0",
+    "prettier": "^3.8.3",
+    "ts-jest": "^29.4.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  }
+}
