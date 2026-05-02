@@ -1,0 +1,26 @@
+# dependencies
+node_modules
+
+# build output
+dist
+*.d.ts
+*.js.map
+
+# cdk
+cdk.out
+
+# environment
+.env
+.env.*
+
+# os
+.DS_Store
+
+# typescript
+*.tsbuildinfo
+
+# test coverage
+coverage
+
+# logs
+npm-debug.log*
