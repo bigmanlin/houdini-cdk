@@ -1,0 +1,125 @@
+import { Stack, StackProps, Duration } from 'aws-cdk-lib';
+import { Vpc, SubnetType } from 'aws-cdk-lib/aws-ec2';
+import { Cluster, ContainerImage, Secret as EcsSecret } from 'aws-cdk-lib/aws-ecs';
+import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
+import { Repository } from 'aws-cdk-lib/aws-ecr';
+import { Role, ServicePrincipal, ManagedPolicy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
+import { Queue } from 'aws-cdk-lib/aws-sqs';
+import { Table } from 'aws-cdk-lib/aws-dynamodb';
+import { Bucket } from 'aws-cdk-lib/aws-s3';
+import { Construct } from 'constructs';
+
+interface EcsStackProps extends StackProps {
+  repository: Repository;
+  cronJobQueue: Queue;
+  schedulerRoleArn: string;
+  strategiesBucket: Bucket;
+  usersTable: Table;
+  portfoliosTable: Table;
+  positionsTable: Table;
+  tradesTable: Table;
+  cronJobsTable: Table;
+  cronJobRunsTable: Table;
+  transactionsTable: Table;
+}
+
+export class EcsStack extends Stack {
+  public readonly loadBalancerDnsName: string;
+
+  constructor(scope: Construct, id: string, props: EcsStackProps) {
+    super(scope, id, props);
+
+    // ── Secrets ───────────────────────────────────────────────────────────────
+    const alpacaSecret = Secret.fromSecretNameV2(this, 'AlpacaSecret', 'houdini/alpaca');
+    const fmpSecret = Secret.fromSecretNameV2(this, 'FmpSecret', 'houdini/fmp');
+    const anthropicSecret = Secret.fromSecretNameV2(this, 'AnthropicSecret', 'houdini/anthropic');
+
+    // ── IAM ───────────────────────────────────────────────────────────────────
+    const taskRole = new Role(this, 'TaskRole', {
+      assumedBy: new ServicePrincipal('ecs-tasks.amazonaws.com'),
+    });
+
+    const tables = [
+      props.usersTable,
+      props.portfoliosTable,
+      props.positionsTable,
+      props.tradesTable,
+      props.cronJobsTable,
+      props.cronJobRunsTable,
+      props.transactionsTable,
+    ];
+    tables.forEach((t) => t.grantReadWriteData(taskRole));
+    props.strategiesBucket.grantReadWrite(taskRole);
+
+    // createCronJobForPortfolio creates EventBridge schedules
+    taskRole.addToPolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ['scheduler:CreateSchedule'],
+        resources: ['*'],
+      }),
+    );
+    taskRole.addToPolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ['iam:PassRole'],
+        resources: [props.schedulerRoleArn],
+      }),
+    );
+
+    // Execution role — ECS agent uses this to pull the image and fetch secrets
+    const executionRole = new Role(this, 'ExecutionRole', {
+      assumedBy: new ServicePrincipal('ecs-tasks.amazonaws.com'),
+      managedPolicies: [
+        ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'),
+      ],
+    });
+
+    alpacaSecret.grantRead(executionRole);
+    fmpSecret.grantRead(executionRole);
+    anthropicSecret.grantRead(executionRole);
+
+    // ── ECS + ALB ─────────────────────────────────────────────────────────────
+    const vpc = Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
+    const cluster = new Cluster(this, 'HoudiniCluster', { vpc, clusterName: 'HoudiniCluster' });
+
+    const service = new ApplicationLoadBalancedFargateService(this, 'HoudiniService', {
+      cluster,
+      memoryLimitMiB: 512,
+      cpu: 256,
+      desiredCount: 1,
+      assignPublicIp: true,
+      taskSubnets: { subnetType: SubnetType.PUBLIC },
+      loadBalancerName: 'HoudiniALB',
+      serviceName: 'HoudiniService',
+      taskImageOptions: {
+        image: ContainerImage.fromEcrRepository(props.repository, 'latest'),
+        containerPort: 3000,
+        taskRole,
+        executionRole,
+        environment: {
+          AWS_REGION: this.region,
+          ANTHROPIC_MODEL: 'claude-sonnet-4-6',
+          STRATEGIES_BUCKET: props.strategiesBucket.bucketName,
+          CRON_JOB_QUEUE_ARN: props.cronJobQueue.queueArn,
+          SCHEDULER_ROLE_ARN: props.schedulerRoleArn,
+        },
+        secrets: {
+          ALPACA_API_KEY: EcsSecret.fromSecretsManager(alpacaSecret, 'apiKey'),
+          ALPACA_API_SECRET: EcsSecret.fromSecretsManager(alpacaSecret, 'apiSecret'),
+          FMP_API_KEY: EcsSecret.fromSecretsManager(fmpSecret, 'apiKey'),
+          ANTHROPIC_API_KEY: EcsSecret.fromSecretsManager(anthropicSecret, 'apiKey'),
+        },
+      },
+      publicLoadBalancer: true,
+    });
+
+    service.targetGroup.configureHealthCheck({
+      path: '/',
+      interval: Duration.seconds(30),
+    });
+
+    this.loadBalancerDnsName = service.loadBalancer.loadBalancerDnsName;
+  }
+}

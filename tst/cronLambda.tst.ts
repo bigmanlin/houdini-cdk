@@ -1,25 +1,14 @@
 import { App } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
-import { DdbStack } from '../lib/ddb/ddb';
-import { S3Stack } from '../lib/s3/s3';
 import { SqsStack } from '../lib/sqs/sqs';
 import { CronLambdaStack } from '../lib/lambda/cronLambda';
 
 describe('CronLambdaStack', () => {
   const app = new App();
-  const ddb = new DdbStack(app, 'TestDdbStack');
-  const s3 = new S3Stack(app, 'TestS3Stack');
   const sqs = new SqsStack(app, 'TestSqsStack');
   const stack = new CronLambdaStack(app, 'TestCronLambdaStack', {
     cronJobQueue: sqs.cronJobQueue,
-    strategiesBucket: s3.strategiesBucket,
-    usersTable: ddb.usersTable,
-    portfoliosTable: ddb.portfoliosTable,
-    positionsTable: ddb.positionsTable,
-    tradesTable: ddb.tradesTable,
-    cronJobsTable: ddb.cronJobsTable,
-    cronJobRunsTable: ddb.cronJobRunsTable,
-    transactionsTable: ddb.transactionsTable,
+    internalApiUrl: 'http://test-alb.us-east-1.elb.amazonaws.com',
   });
   const template = Template.fromStack(stack);
 
@@ -33,24 +22,17 @@ describe('CronLambdaStack', () => {
     });
   });
 
-  test('function has 5 minute timeout', () => {
+  test('function has 30 second timeout', () => {
     template.hasResourceProperties('AWS::Lambda::Function', {
-      Timeout: 300,
+      Timeout: 30,
     });
   });
 
-  test('function has all required environment variable keys', () => {
+  test('function has INTERNAL_API_URL environment variable', () => {
     template.hasResourceProperties('AWS::Lambda::Function', {
       Environment: {
         Variables: Match.objectLike({
-          STRATEGIES_BUCKET: Match.anyValue(),
-          USERS_TABLE: Match.anyValue(),
-          PORTFOLIOS_TABLE: Match.anyValue(),
-          POSITIONS_TABLE: Match.anyValue(),
-          TRADES_TABLE: Match.anyValue(),
-          CRON_JOBS_TABLE: Match.anyValue(),
-          CRON_JOB_RUNS_TABLE: Match.anyValue(),
-          TRANSACTIONS_TABLE: Match.anyValue(),
+          INTERNAL_API_URL: 'http://test-alb.us-east-1.elb.amazonaws.com',
         }),
       },
     });
@@ -62,19 +44,16 @@ describe('CronLambdaStack', () => {
     });
   });
 
-  test('execution role has DynamoDB read/write permissions', () => {
+  test('execution role has only basic Lambda execution policy', () => {
+    template.hasResourceProperties('AWS::IAM::Role', {
+      ManagedPolicyArns: Match.arrayWith([
+        Match.objectLike({ 'Fn::Join': Match.anyValue() }),
+      ]),
+    });
+    // No DynamoDB or S3 policies — logic runs in ECS, not Lambda
     const policies = template.findResources('AWS::IAM::Policy');
     const policyJson = JSON.stringify(policies);
-    expect(policyJson).toContain('dynamodb:PutItem');
-    expect(policyJson).toContain('dynamodb:GetItem');
-    expect(policyJson).toContain('dynamodb:UpdateItem');
-    expect(policyJson).toContain('dynamodb:DeleteItem');
-  });
-
-  test('execution role has S3 read permission on strategies bucket', () => {
-    const policies = template.findResources('AWS::IAM::Policy');
-    const policyJson = JSON.stringify(policies);
-    expect(policyJson).toContain('s3:GetObject*');
-    expect(policyJson).toContain('s3:List*');
+    expect(policyJson).not.toContain('dynamodb:PutItem');
+    expect(policyJson).not.toContain('s3:GetObject');
   });
 });
