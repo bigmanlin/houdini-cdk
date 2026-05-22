@@ -6,6 +6,8 @@ export enum TableName {
   CronJobs = 'cronJobs',
   CronJobRuns = 'cronJobRuns',
   Transactions = 'transactions',
+  PortfolioEodValueHistory = 'portfolioEodValueHistory',
+  OverviewEodValueHistory = 'overviewEodValueHistory',
 }
 
 export enum GsiName {
@@ -15,4 +17,5 @@ export enum GsiName {
   CronJobRunsByPortfolio = 'cronJobRunsByPortfolio',
   TradesByCronJob = 'tradesByCronJob',
   TransactionsByPortfolio = 'transactionsByPortfolio',
+  PortfolioEodValueHistoryByUser = 'portfolioEodValueHistoryByUser',
 }
