@@ -16,15 +16,15 @@ describe('CronLambdaStack', () => {
     template.resourceCountIs('AWS::Lambda::Function', 1);
   });
 
-  test('function uses Node.js 20 runtime', () => {
+  test('function uses Node.js 22 runtime', () => {
     template.hasResourceProperties('AWS::Lambda::Function', {
-      Runtime: 'nodejs20.x',
+      Runtime: 'nodejs22.x',
     });
   });
 
-  test('function has 30 second timeout', () => {
+  test('function has 3 minute timeout', () => {
     template.hasResourceProperties('AWS::Lambda::Function', {
-      Timeout: 30,
+      Timeout: 180,
     });
   });
 

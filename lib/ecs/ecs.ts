@@ -1,6 +1,6 @@
 import { Stack, StackProps, Duration } from 'aws-cdk-lib';
 import { Vpc, SubnetType } from 'aws-cdk-lib/aws-ec2';
-import { Cluster, ContainerImage, Secret as EcsSecret } from 'aws-cdk-lib/aws-ecs';
+import { Cluster, ContainerImage, Secret as EcsSecret, LogDrivers } from 'aws-cdk-lib/aws-ecs';
 import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
 import { Repository } from 'aws-cdk-lib/aws-ecr';
 import { Role, ServicePrincipal, ManagedPolicy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
@@ -8,6 +8,7 @@ import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
+import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 
 interface EcsStackProps extends StackProps {
@@ -84,6 +85,11 @@ export class EcsStack extends Stack {
     const vpc = Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
     const cluster = new Cluster(this, 'HoudiniCluster', { vpc, clusterName: 'HoudiniCluster' });
 
+    const logGroup = new LogGroup(this, 'HoudiniLogGroup', {
+      logGroupName: '/ecs/houdini',
+      retention: RetentionDays.ONE_MONTH,
+    });
+
     const service = new ApplicationLoadBalancedFargateService(this, 'HoudiniService', {
       cluster,
       memoryLimitMiB: 512,
@@ -111,6 +117,10 @@ export class EcsStack extends Stack {
           FMP_API_KEY: EcsSecret.fromSecretsManager(fmpSecret, 'apiKey'),
           ANTHROPIC_API_KEY: EcsSecret.fromSecretsManager(anthropicSecret, 'apiKey'),
         },
+        logDriver: LogDrivers.awsLogs({
+          logGroup,
+          streamPrefix: 'ecs',
+        }),
       },
       publicLoadBalancer: true,
     });
