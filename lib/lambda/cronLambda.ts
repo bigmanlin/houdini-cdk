@@ -32,7 +32,7 @@ export class CronLambdaStack extends Stack {
       runtime: Runtime.NODEJS_22_X,
       entry: join(__dirname, '../../lambda/cron/index.ts'),
       handler: 'handler',
-      timeout: Duration.seconds(30),
+      timeout: Duration.minutes(3),
       role: executionRole,
       environment: {
         INTERNAL_API_URL: props.internalApiUrl,
