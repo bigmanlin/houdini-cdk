@@ -11,6 +11,8 @@ export class DdbStack extends Stack {
   public readonly cronJobsTable: Table;
   public readonly cronJobRunsTable: Table;
   public readonly transactionsTable: Table;
+  public readonly portfolioEodValueHistoryTable: Table;
+  public readonly overviewEodValueHistoryTable: Table;
 
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
@@ -102,6 +104,29 @@ export class DdbStack extends Stack {
       indexName: GsiName.TransactionsByPortfolio,
       partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
       projectionType: ProjectionType.ALL,
+    });
+
+    this.portfolioEodValueHistoryTable = new Table(this, 'PortfolioEodValueHistoryTable', {
+      tableName: TableName.PortfolioEodValueHistory,
+      partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
+      sortKey: { name: 'date', type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    this.portfolioEodValueHistoryTable.addGlobalSecondaryIndex({
+      indexName: GsiName.PortfolioEodValueHistoryByUser,
+      partitionKey: { name: 'userId', type: AttributeType.STRING },
+      sortKey: { name: 'date', type: AttributeType.STRING },
+      projectionType: ProjectionType.ALL,
+    });
+
+    this.overviewEodValueHistoryTable = new Table(this, 'OverviewEodValueHistoryTable', {
+      tableName: TableName.OverviewEodValueHistory,
+      partitionKey: { name: 'userId', type: AttributeType.STRING },
+      sortKey: { name: 'date', type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.RETAIN,
     });
   }
 }

@@ -8,8 +8,8 @@ describe('DdbStack', () => {
   const stack = new DdbStack(app, 'TestDdbStack');
   const template = Template.fromStack(stack);
 
-  test('creates 7 tables', () => {
-    template.resourceCountIs('AWS::DynamoDB::Table', 7);
+  test('creates 9 tables', () => {
+    template.resourceCountIs('AWS::DynamoDB::Table', 9);
   });
 
   test('all tables use PAY_PER_REQUEST billing', () => {
@@ -95,6 +95,35 @@ describe('DdbStack', () => {
           IndexName: GsiName.TransactionsByPortfolio,
           KeySchema: [{ AttributeName: 'portfolioId', KeyType: 'HASH' }],
         },
+      ],
+    });
+  });
+
+  test('portfolioEodValueHistory table has portfolioId + date composite key and userId GSI', () => {
+    template.hasResourceProperties('AWS::DynamoDB::Table', {
+      TableName: TableName.PortfolioEodValueHistory,
+      KeySchema: [
+        { AttributeName: 'portfolioId', KeyType: 'HASH' },
+        { AttributeName: 'date', KeyType: 'RANGE' },
+      ],
+      GlobalSecondaryIndexes: [
+        {
+          IndexName: GsiName.PortfolioEodValueHistoryByUser,
+          KeySchema: [
+            { AttributeName: 'userId', KeyType: 'HASH' },
+            { AttributeName: 'date', KeyType: 'RANGE' },
+          ],
+        },
+      ],
+    });
+  });
+
+  test('overviewEodValueHistory table has userId + date composite key', () => {
+    template.hasResourceProperties('AWS::DynamoDB::Table', {
+      TableName: TableName.OverviewEodValueHistory,
+      KeySchema: [
+        { AttributeName: 'userId', KeyType: 'HASH' },
+        { AttributeName: 'date', KeyType: 'RANGE' },
       ],
     });
   });

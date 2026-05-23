@@ -6,6 +6,7 @@ import { EventBridgeStack } from './eventbridge/eventbridge';
 import { EcrStack } from './ecr/ecr';
 import { EcsStack } from './ecs/ecs';
 import { CronLambdaStack } from './lambda/cronLambda';
+import { EodLambdaStack } from './lambda/eodLambda';
 
 const app = new App();
 
@@ -17,8 +18,21 @@ const env = {
 const ddb = new DdbStack(app, 'DdbStack', { env });
 const s3 = new S3Stack(app, 'S3Stack', { env });
 const sqs = new SqsStack(app, 'SqsStack', { env });
-const eventbridge = new EventBridgeStack(app, 'EventBridgeStack', { env, cronJobQueue: sqs.cronJobQueue });
 const ecr = new EcrStack(app, 'EcrStack', { env });
+
+const eod = new EodLambdaStack(app, 'EodLambdaStack', {
+  env,
+  portfoliosTable: ddb.portfoliosTable,
+  positionsTable: ddb.positionsTable,
+  portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
+  overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
+});
+
+const eventbridge = new EventBridgeStack(app, 'EventBridgeStack', {
+  env,
+  cronJobQueue: sqs.cronJobQueue,
+  eodFunction: eod.eodFunction,
+});
 
 const ecs = new EcsStack(app, 'EcsStack', {
   env,

@@ -26,6 +26,10 @@
   },
   "homepage": "https://github.com/bigmanlin/houdini-cdk#readme",
   "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1052.0",
+    "@aws-sdk/client-secrets-manager": "^3.1052.0",
+    "@aws-sdk/lib-dynamodb": "^3.1052.0",
+    "@types/aws-lambda": "^8.10.161",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.6.0",
     "@typescript-eslint/eslint-plugin": "^8.59.1",
@@ -33,6 +37,7 @@
     "aws-cdk": "^2.1120.0",
     "aws-cdk-lib": "^2.252.0",
     "constructs": "^10.6.0",
+    "esbuild": "^0.28.0",
     "eslint": "^9.39.4",
     "eslint-plugin-import": "^2.32.0",
     "jest": "^30.3.0",
