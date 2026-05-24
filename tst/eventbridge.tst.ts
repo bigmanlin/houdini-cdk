@@ -1,26 +1,15 @@
 import { App } from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
-import { DdbStack } from '../lib/ddb/ddb';
+import { Template, Match } from 'aws-cdk-lib/assertions';
 import { SqsStack } from '../lib/sqs/sqs';
-import { EodLambdaStack } from '../lib/lambda/eodLambda';
 import { EventBridgeStack } from '../lib/eventbridge/eventbridge';
 
 describe('EventBridgeStack', () => {
   const env = { account: '123456789012', region: 'us-east-1' };
   const app = new App();
-  const ddb = new DdbStack(app, 'TestDdbStack', { env });
-  const sqsStack = new SqsStack(app, 'TestSqsStack', { env });
-  const eod = new EodLambdaStack(app, 'TestEodLambdaStack', {
-    env,
-    portfoliosTable: ddb.portfoliosTable,
-    positionsTable: ddb.positionsTable,
-    portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
-    overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
-  });
+  const sqs = new SqsStack(app, 'TestSqsStack', { env });
   const stack = new EventBridgeStack(app, 'TestEventBridgeStack', {
     env,
-    cronJobQueue: sqsStack.cronJobQueue,
-    eodFunction: eod.eodFunction,
+    cronJobQueue: sqs.cronJobQueue,
   });
   const template = Template.fromStack(stack);
 
@@ -46,12 +35,12 @@ describe('EventBridgeStack', () => {
   test('scheduler role can send messages to SQS', () => {
     template.hasResourceProperties('AWS::IAM::Policy', {
       PolicyDocument: {
-        Statement: [
-          {
+        Statement: Match.arrayWith([
+          Match.objectLike({
             Effect: 'Allow',
             Action: 'sqs:SendMessage',
-          },
-        ],
+          }),
+        ]),
       },
     });
   });

@@ -20,18 +20,9 @@ const s3 = new S3Stack(app, 'S3Stack', { env });
 const sqs = new SqsStack(app, 'SqsStack', { env });
 const ecr = new EcrStack(app, 'EcrStack', { env });
 
-const eod = new EodLambdaStack(app, 'EodLambdaStack', {
-  env,
-  portfoliosTable: ddb.portfoliosTable,
-  positionsTable: ddb.positionsTable,
-  portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
-  overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
-});
-
 const eventbridge = new EventBridgeStack(app, 'EventBridgeStack', {
   env,
   cronJobQueue: sqs.cronJobQueue,
-  eodFunction: eod.eodFunction,
 });
 
 const ecs = new EcsStack(app, 'EcsStack', {
@@ -47,6 +38,13 @@ const ecs = new EcsStack(app, 'EcsStack', {
   cronJobsTable: ddb.cronJobsTable,
   cronJobRunsTable: ddb.cronJobRunsTable,
   transactionsTable: ddb.transactionsTable,
+  portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
+  overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
+});
+
+new EodLambdaStack(app, 'EodLambdaStack', {
+  env,
+  internalApiUrl: `http://${ecs.loadBalancerDnsName}`,
 });
 
 new CronLambdaStack(app, 'CronLambdaStack', {
