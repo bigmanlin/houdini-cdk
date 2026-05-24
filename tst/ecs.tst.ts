@@ -6,7 +6,6 @@ import { SqsStack } from '../lib/sqs/sqs';
 import { EventBridgeStack } from '../lib/eventbridge/eventbridge';
 import { EcrStack } from '../lib/ecr/ecr';
 import { EcsStack } from '../lib/ecs/ecs';
-import { EodLambdaStack } from '../lib/lambda/eodLambda';
 
 describe('EcsStack', () => {
   const env = { account: '123456789012', region: 'us-east-1' };
@@ -14,17 +13,9 @@ describe('EcsStack', () => {
   const ddb = new DdbStack(app, 'TestDdbStack', { env });
   const s3 = new S3Stack(app, 'TestS3Stack', { env });
   const sqs = new SqsStack(app, 'TestSqsStack', { env });
-  const eod = new EodLambdaStack(app, 'TestEodLambdaStack', {
-    env,
-    portfoliosTable: ddb.portfoliosTable,
-    positionsTable: ddb.positionsTable,
-    portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
-    overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
-  });
   const eventbridge = new EventBridgeStack(app, 'TestEventBridgeStack', {
     env,
     cronJobQueue: sqs.cronJobQueue,
-    eodFunction: eod.eodFunction,
   });
   const ecr = new EcrStack(app, 'TestEcrStack', { env });
   const stack = new EcsStack(app, 'TestEcsStack', {
@@ -40,6 +31,8 @@ describe('EcsStack', () => {
     cronJobsTable: ddb.cronJobsTable,
     cronJobRunsTable: ddb.cronJobRunsTable,
     transactionsTable: ddb.transactionsTable,
+    portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
+    overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
   });
   const template = Template.fromStack(stack);
 

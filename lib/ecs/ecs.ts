@@ -23,6 +23,8 @@ interface EcsStackProps extends StackProps {
   cronJobsTable: Table;
   cronJobRunsTable: Table;
   transactionsTable: Table;
+  portfolioEodValueHistoryTable: Table;
+  overviewEodValueHistoryTable: Table;
 }
 
 export class EcsStack extends Stack {
@@ -49,6 +51,8 @@ export class EcsStack extends Stack {
       props.cronJobsTable,
       props.cronJobRunsTable,
       props.transactionsTable,
+      props.portfolioEodValueHistoryTable,
+      props.overviewEodValueHistoryTable,
     ];
     tables.forEach((t) => t.grantReadWriteData(taskRole));
     props.strategiesBucket.grantReadWrite(taskRole);
