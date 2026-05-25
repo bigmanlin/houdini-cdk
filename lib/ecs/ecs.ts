@@ -61,7 +61,7 @@ export class EcsStack extends Stack {
     taskRole.addToPolicy(
       new PolicyStatement({
         effect: Effect.ALLOW,
-        actions: ['scheduler:CreateSchedule'],
+        actions: ['scheduler:CreateSchedule', 'scheduler:UpdateSchedule', 'scheduler:GetSchedule'],
         resources: ['*'],
       }),
     );
