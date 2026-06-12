@@ -8,6 +8,8 @@ export enum TableName {
   Transactions = 'transactions',
   PortfolioEodValueHistory = 'portfolioEodValueHistory',
   OverviewEodValueHistory = 'overviewEodValueHistory',
+  PortfolioIntradayValueHistory = 'portfolioIntradayValueHistory',
+  OverviewIntradayValueHistory = 'overviewIntradayValueHistory',
 }
 
 export enum GsiName {

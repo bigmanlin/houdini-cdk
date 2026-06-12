@@ -8,8 +8,8 @@ describe('DdbStack', () => {
   const stack = new DdbStack(app, 'TestDdbStack');
   const template = Template.fromStack(stack);
 
-  test('creates 9 tables', () => {
-    template.resourceCountIs('AWS::DynamoDB::Table', 9);
+  test('creates 11 tables', () => {
+    template.resourceCountIs('AWS::DynamoDB::Table', 11);
   });
 
   test('all tables use PAY_PER_REQUEST billing', () => {

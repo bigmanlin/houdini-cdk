@@ -24,6 +24,7 @@ describe('EcsStack', () => {
     cronJobQueue: sqs.cronJobQueue,
     schedulerRoleArn: eventbridge.schedulerRole.roleArn,
     strategiesBucket: s3.strategiesBucket,
+    uploadsBucket: s3.uploadsBucket,
     usersTable: ddb.usersTable,
     portfoliosTable: ddb.portfoliosTable,
     positionsTable: ddb.positionsTable,
@@ -33,6 +34,8 @@ describe('EcsStack', () => {
     transactionsTable: ddb.transactionsTable,
     portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
     overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
+    portfolioIntradayValueHistoryTable: ddb.portfolioIntradayValueHistoryTable,
+    overviewIntradayValueHistoryTable: ddb.overviewIntradayValueHistoryTable,
   });
   const template = Template.fromStack(stack);
 
@@ -81,7 +84,10 @@ describe('EcsStack', () => {
   });
 
   test('task role has DynamoDB read/write permissions', () => {
-    const policies = template.findResources('AWS::IAM::Policy');
+    const policies = {
+      ...template.findResources('AWS::IAM::Policy'),
+      ...template.findResources('AWS::IAM::ManagedPolicy'),
+    };
     const policyJson = JSON.stringify(policies);
     expect(policyJson).toContain('dynamodb:PutItem');
     expect(policyJson).toContain('dynamodb:GetItem');
@@ -89,14 +95,20 @@ describe('EcsStack', () => {
   });
 
   test('task role has S3 read/write permission on strategies bucket', () => {
-    const policies = template.findResources('AWS::IAM::Policy');
+    const policies = {
+      ...template.findResources('AWS::IAM::Policy'),
+      ...template.findResources('AWS::IAM::ManagedPolicy'),
+    };
     const policyJson = JSON.stringify(policies);
     expect(policyJson).toContain('s3:PutObject');
     expect(policyJson).toContain('s3:GetObject*');
   });
 
   test('task role can create EventBridge schedules', () => {
-    const policies = template.findResources('AWS::IAM::Policy');
+    const policies = {
+      ...template.findResources('AWS::IAM::Policy'),
+      ...template.findResources('AWS::IAM::ManagedPolicy'),
+    };
     const policyJson = JSON.stringify(policies);
     expect(policyJson).toContain('scheduler:CreateSchedule');
     expect(policyJson).toContain('iam:PassRole');

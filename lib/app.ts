@@ -7,6 +7,7 @@ import { EcrStack } from './ecr/ecr';
 import { EcsStack } from './ecs/ecs';
 import { CronLambdaStack } from './lambda/cronLambda';
 import { EodLambdaStack } from './lambda/eodLambda';
+import { IntradayLambdaStack } from './lambda/intradayLambda';
 
 const app = new App();
 
@@ -31,6 +32,7 @@ const ecs = new EcsStack(app, 'EcsStack', {
   cronJobQueue: sqs.cronJobQueue,
   schedulerRoleArn: eventbridge.schedulerRole.roleArn,
   strategiesBucket: s3.strategiesBucket,
+  uploadsBucket: s3.uploadsBucket,
   usersTable: ddb.usersTable,
   portfoliosTable: ddb.portfoliosTable,
   positionsTable: ddb.positionsTable,
@@ -40,9 +42,16 @@ const ecs = new EcsStack(app, 'EcsStack', {
   transactionsTable: ddb.transactionsTable,
   portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
   overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
+  portfolioIntradayValueHistoryTable: ddb.portfolioIntradayValueHistoryTable,
+  overviewIntradayValueHistoryTable: ddb.overviewIntradayValueHistoryTable,
 });
 
 new EodLambdaStack(app, 'EodLambdaStack', {
+  env,
+  internalApiUrl: `http://${ecs.loadBalancerDnsName}`,
+});
+
+new IntradayLambdaStack(app, 'IntradayLambdaStack', {
   env,
   internalApiUrl: `http://${ecs.loadBalancerDnsName}`,
 });
