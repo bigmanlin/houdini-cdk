@@ -7,13 +7,21 @@ describe('S3Stack', () => {
   const stack = new S3Stack(app, 'TestS3Stack');
   const template = Template.fromStack(stack);
 
-  test('creates 1 bucket', () => {
-    template.resourceCountIs('AWS::S3::Bucket', 1);
+  test('creates the strategies and uploads buckets', () => {
+    template.resourceCountIs('AWS::S3::Bucket', 2);
   });
 
-  test('bucket has versioning enabled', () => {
+  test('strategies bucket has versioning enabled', () => {
     template.hasResourceProperties('AWS::S3::Bucket', {
       VersioningConfiguration: { Status: 'Enabled' },
+    });
+  });
+
+  test('uploads bucket expires temp objects via a lifecycle rule', () => {
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      LifecycleConfiguration: {
+        Rules: [{ Prefix: 'tmp/', Status: 'Enabled', ExpirationInDays: 2 }],
+      },
     });
   });
 

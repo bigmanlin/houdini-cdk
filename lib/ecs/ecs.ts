@@ -16,6 +16,7 @@ interface EcsStackProps extends StackProps {
   cronJobQueue: Queue;
   schedulerRoleArn: string;
   strategiesBucket: Bucket;
+  uploadsBucket: Bucket;
   usersTable: Table;
   portfoliosTable: Table;
   positionsTable: Table;
@@ -25,6 +26,8 @@ interface EcsStackProps extends StackProps {
   transactionsTable: Table;
   portfolioEodValueHistoryTable: Table;
   overviewEodValueHistoryTable: Table;
+  portfolioIntradayValueHistoryTable: Table;
+  overviewIntradayValueHistoryTable: Table;
 }
 
 export class EcsStack extends Stack {
@@ -53,9 +56,21 @@ export class EcsStack extends Stack {
       props.transactionsTable,
       props.portfolioEodValueHistoryTable,
       props.overviewEodValueHistoryTable,
+      props.portfolioIntradayValueHistoryTable,
+      props.overviewIntradayValueHistoryTable,
     ];
     tables.forEach((t) => t.grantReadWriteData(taskRole));
     props.strategiesBucket.grantReadWrite(taskRole);
+    // Chat attachments: the app only presigns PUT/GET against the temp prefix, so
+    // grant exactly those two actions (least privilege, and keeps the role's
+    // policy small enough to avoid being split into an overflow managed policy).
+    taskRole.addToPolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ['s3:PutObject', 's3:GetObject'],
+        resources: [props.uploadsBucket.arnForObjects('tmp/*')],
+      }),
+    );
 
     // createCronJobForPortfolio creates EventBridge schedules
     taskRole.addToPolicy(
@@ -112,6 +127,7 @@ export class EcsStack extends Stack {
           AWS_REGION: this.region,
           ANTHROPIC_MODEL: 'claude-sonnet-4-6',
           STRATEGIES_BUCKET: props.strategiesBucket.bucketName,
+          UPLOADS_BUCKET: props.uploadsBucket.bucketName,
           CRON_JOB_QUEUE_ARN: props.cronJobQueue.queueArn,
           SCHEDULER_ROLE_ARN: props.schedulerRoleArn,
         },

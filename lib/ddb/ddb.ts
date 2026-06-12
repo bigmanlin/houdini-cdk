@@ -13,6 +13,8 @@ export class DdbStack extends Stack {
   public readonly transactionsTable: Table;
   public readonly portfolioEodValueHistoryTable: Table;
   public readonly overviewEodValueHistoryTable: Table;
+  public readonly portfolioIntradayValueHistoryTable: Table;
+  public readonly overviewIntradayValueHistoryTable: Table;
 
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
@@ -127,6 +129,26 @@ export class DdbStack extends Stack {
       sortKey: { name: 'date', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    // Intraday tables hold 30-min value snapshots, keyed by slot boundary;
+    // rows carry a `ttl` attribute (~7 days) so DynamoDB reaps them itself.
+    this.portfolioIntradayValueHistoryTable = new Table(this, 'PortfolioIntradayValueHistoryTable', {
+      tableName: TableName.PortfolioIntradayValueHistory,
+      partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
+      sortKey: { name: 'slotTimestamp', type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.RETAIN,
+      timeToLiveAttribute: 'ttl',
+    });
+
+    this.overviewIntradayValueHistoryTable = new Table(this, 'OverviewIntradayValueHistoryTable', {
+      tableName: TableName.OverviewIntradayValueHistory,
+      partitionKey: { name: 'userId', type: AttributeType.STRING },
+      sortKey: { name: 'slotTimestamp', type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.RETAIN,
+      timeToLiveAttribute: 'ttl',
     });
   }
 }
