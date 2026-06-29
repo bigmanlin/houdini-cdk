@@ -76,7 +76,12 @@ export class EcsStack extends Stack {
     taskRole.addToPolicy(
       new PolicyStatement({
         effect: Effect.ALLOW,
-        actions: ['scheduler:CreateSchedule', 'scheduler:UpdateSchedule', 'scheduler:GetSchedule'],
+        actions: [
+          'scheduler:CreateSchedule',
+          'scheduler:UpdateSchedule',
+          'scheduler:GetSchedule',
+          'scheduler:DeleteSchedule',
+        ],
         resources: ['*'],
       }),
     );
@@ -111,9 +116,11 @@ export class EcsStack extends Stack {
 
     const service = new ApplicationLoadBalancedFargateService(this, 'HoudiniService', {
       cluster,
-      memoryLimitMiB: 512,
-      cpu: 256,
+      memoryLimitMiB: 1024,
+      cpu: 512,
       desiredCount: 1,
+      minHealthyPercent: 100,
+      maxHealthyPercent: 200,
       assignPublicIp: true,
       taskSubnets: { subnetType: SubnetType.PUBLIC },
       loadBalancerName: 'HoudiniALB',
@@ -143,6 +150,17 @@ export class EcsStack extends Stack {
         }),
       },
       publicLoadBalancer: true,
+    });
+
+    const scaling = service.service.autoScaleTaskCount({
+      minCapacity: 1,
+      maxCapacity: 4,
+    });
+
+    scaling.scaleOnCpuUtilization('CpuScaling', {
+      targetUtilizationPercent: 60,
+      scaleInCooldown: Duration.seconds(120),
+      scaleOutCooldown: Duration.seconds(60),
     });
 
     service.targetGroup.configureHealthCheck({
