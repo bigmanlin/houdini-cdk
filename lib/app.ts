@@ -5,7 +5,6 @@ import { SqsStack } from './sqs/sqs';
 import { EventBridgeStack } from './eventbridge/eventbridge';
 import { EcrStack } from './ecr/ecr';
 import { EcsStack } from './ecs/ecs';
-import { CronLambdaStack } from './lambda/cronLambda';
 import { EodLambdaStack } from './lambda/eodLambda';
 import { IntradayLambdaStack } from './lambda/intradayLambda';
 
@@ -53,11 +52,5 @@ new EodLambdaStack(app, 'EodLambdaStack', {
 
 new IntradayLambdaStack(app, 'IntradayLambdaStack', {
   env,
-  internalApiUrl: `http://${ecs.loadBalancerDnsName}`,
-});
-
-new CronLambdaStack(app, 'CronLambdaStack', {
-  env,
-  cronJobQueue: sqs.cronJobQueue,
   internalApiUrl: `http://${ecs.loadBalancerDnsName}`,
 });

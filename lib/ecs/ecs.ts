@@ -93,6 +93,9 @@ export class EcsStack extends Stack {
       }),
     );
 
+    // The app consumes the cron job queue directly (receive/delete)
+    props.cronJobQueue.grantConsumeMessages(taskRole);
+
     // Execution role — ECS agent uses this to pull the image and fetch secrets
     const executionRole = new Role(this, 'ExecutionRole', {
       assumedBy: new ServicePrincipal('ecs-tasks.amazonaws.com'),
