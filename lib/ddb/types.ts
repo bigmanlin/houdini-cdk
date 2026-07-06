@@ -10,6 +10,7 @@ export enum TableName {
   OverviewEodValueHistory = 'overviewEodValueHistory',
   PortfolioIntradayValueHistory = 'portfolioIntradayValueHistory',
   OverviewIntradayValueHistory = 'overviewIntradayValueHistory',
+  StockResearch = 'stockResearch',
 }
 
 export enum GsiName {

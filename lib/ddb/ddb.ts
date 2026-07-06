@@ -15,6 +15,7 @@ export class DdbStack extends Stack {
   public readonly overviewEodValueHistoryTable: Table;
   public readonly portfolioIntradayValueHistoryTable: Table;
   public readonly overviewIntradayValueHistoryTable: Table;
+  public readonly stockResearchTable: Table;
 
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
@@ -146,6 +147,16 @@ export class DdbStack extends Stack {
       tableName: TableName.OverviewIntradayValueHistory,
       partitionKey: { name: 'userId', type: AttributeType.STRING },
       sortKey: { name: 'slotTimestamp', type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.RETAIN,
+      timeToLiveAttribute: 'ttl',
+    });
+
+    // Tier 2 market research, one row per symbol, refreshed daily by the
+    // pre-market ingestion job; rows carry a `ttl` attribute (~48h).
+    this.stockResearchTable = new Table(this, 'StockResearchTable', {
+      tableName: TableName.StockResearch,
+      partitionKey: { name: 'symbol', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
       timeToLiveAttribute: 'ttl',

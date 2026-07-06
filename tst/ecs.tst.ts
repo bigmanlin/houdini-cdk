@@ -36,6 +36,7 @@ describe('EcsStack', () => {
     overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
     portfolioIntradayValueHistoryTable: ddb.portfolioIntradayValueHistoryTable,
     overviewIntradayValueHistoryTable: ddb.overviewIntradayValueHistoryTable,
+    stockResearchTable: ddb.stockResearchTable,
   });
   const template = Template.fromStack(stack);
 
