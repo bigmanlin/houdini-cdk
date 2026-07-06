@@ -7,6 +7,7 @@ import { EcrStack } from './ecr/ecr';
 import { EcsStack } from './ecs/ecs';
 import { EodLambdaStack } from './lambda/eodLambda';
 import { IntradayLambdaStack } from './lambda/intradayLambda';
+import { StockResearchLambdaStack } from './lambda/stockResearchLambda';
 
 const app = new App();
 
@@ -43,6 +44,7 @@ const ecs = new EcsStack(app, 'EcsStack', {
   overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
   portfolioIntradayValueHistoryTable: ddb.portfolioIntradayValueHistoryTable,
   overviewIntradayValueHistoryTable: ddb.overviewIntradayValueHistoryTable,
+  stockResearchTable: ddb.stockResearchTable,
 });
 
 new EodLambdaStack(app, 'EodLambdaStack', {
@@ -51,6 +53,11 @@ new EodLambdaStack(app, 'EodLambdaStack', {
 });
 
 new IntradayLambdaStack(app, 'IntradayLambdaStack', {
+  env,
+  internalApiUrl: `http://${ecs.loadBalancerDnsName}`,
+});
+
+new StockResearchLambdaStack(app, 'StockResearchLambdaStack', {
   env,
   internalApiUrl: `http://${ecs.loadBalancerDnsName}`,
 });
