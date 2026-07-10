@@ -47,13 +47,20 @@ describe('DdbStack', () => {
     });
   });
 
-  test('trades table has cronJobId GSI', () => {
+  test('trades table has cronJobId and portfolioId+timestamp GSIs', () => {
     template.hasResourceProperties('AWS::DynamoDB::Table', {
       TableName: TableName.Trades,
       GlobalSecondaryIndexes: [
         {
           IndexName: GsiName.TradesByCronJob,
           KeySchema: [{ AttributeName: 'cronJobId', KeyType: 'HASH' }],
+        },
+        {
+          IndexName: GsiName.TradesByPortfolioTime,
+          KeySchema: [
+            { AttributeName: 'portfolioId', KeyType: 'HASH' },
+            { AttributeName: 'timestamp', KeyType: 'RANGE' },
+          ],
         },
       ],
     });
@@ -75,13 +82,20 @@ describe('DdbStack', () => {
     });
   });
 
-  test('cronJobRuns table has portfolioId GSI', () => {
+  test('cronJobRuns table has portfolioId and cronJobId+executedAt GSIs', () => {
     template.hasResourceProperties('AWS::DynamoDB::Table', {
       TableName: TableName.CronJobRuns,
       GlobalSecondaryIndexes: [
         {
           IndexName: GsiName.CronJobRunsByPortfolio,
           KeySchema: [{ AttributeName: 'portfolioId', KeyType: 'HASH' }],
+        },
+        {
+          IndexName: GsiName.CronJobRunsByTime,
+          KeySchema: [
+            { AttributeName: 'cronJobId', KeyType: 'HASH' },
+            { AttributeName: 'executedAt', KeyType: 'RANGE' },
+          ],
         },
       ],
     });
