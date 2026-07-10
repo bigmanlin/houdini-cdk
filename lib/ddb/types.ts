@@ -18,7 +18,9 @@ export enum GsiName {
   CronJobsByUser = 'cronJobsByUser',
   CronJobsByPortfolio = 'cronJobsByPortfolio',
   CronJobRunsByPortfolio = 'cronJobRunsByPortfolio',
+  CronJobRunsByTime = 'cronJobRunsByTime',
   TradesByCronJob = 'tradesByCronJob',
+  TradesByPortfolioTime = 'tradesByPortfolioTime',
   TransactionsByPortfolio = 'transactionsByPortfolio',
   PortfolioEodValueHistoryByUser = 'portfolioEodValueHistoryByUser',
 }

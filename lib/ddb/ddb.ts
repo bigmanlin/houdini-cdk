@@ -62,6 +62,15 @@ export class DdbStack extends Stack {
       projectionType: ProjectionType.ALL,
     });
 
+    // Time-ordered reads (recent list, "since" windows for live P&L / cron
+    // trade-activity) — the base range key (tradeId) is a random UUID.
+    this.tradesTable.addGlobalSecondaryIndex({
+      indexName: GsiName.TradesByPortfolioTime,
+      partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
+      sortKey: { name: 'timestamp', type: AttributeType.STRING },
+      projectionType: ProjectionType.ALL,
+    });
+
     this.cronJobsTable = new Table(this, 'CronJobsTable', {
       tableName: TableName.CronJobs,
       partitionKey: { name: 'cronJobId', type: AttributeType.STRING },
@@ -92,6 +101,15 @@ export class DdbStack extends Stack {
     this.cronJobRunsTable.addGlobalSecondaryIndex({
       indexName: GsiName.CronJobRunsByPortfolio,
       partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
+      projectionType: ProjectionType.ALL,
+    });
+
+    // Time-ordered recency (most-recent runs) — the base range key (runId) is a
+    // random UUID/SQS MessageId, so it can't be ordered by time.
+    this.cronJobRunsTable.addGlobalSecondaryIndex({
+      indexName: GsiName.CronJobRunsByTime,
+      partitionKey: { name: 'cronJobId', type: AttributeType.STRING },
+      sortKey: { name: 'executedAt', type: AttributeType.STRING },
       projectionType: ProjectionType.ALL,
     });
 
