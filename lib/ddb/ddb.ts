@@ -16,6 +16,7 @@ export class DdbStack extends Stack {
   public readonly portfolioIntradayValueHistoryTable: Table;
   public readonly overviewIntradayValueHistoryTable: Table;
   public readonly stockResearchTable: Table;
+  public readonly briefingsTable: Table;
 
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
@@ -113,6 +114,15 @@ export class DdbStack extends Stack {
       projectionType: ProjectionType.ALL,
     });
 
+    // Portfolio-centric time windows ("today's runs", "last N runs") — used by
+    // the briefing generator and upcoming overview/memory reads.
+    this.cronJobRunsTable.addGlobalSecondaryIndex({
+      indexName: GsiName.RunsByPortfolioTime,
+      partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
+      sortKey: { name: 'executedAt', type: AttributeType.STRING },
+      projectionType: ProjectionType.ALL,
+    });
+
     this.transactionsTable = new Table(this, 'TransactionsTable', {
       tableName: TableName.Transactions,
       partitionKey: { name: 'userId', type: AttributeType.STRING },
@@ -175,6 +185,17 @@ export class DdbStack extends Stack {
     this.stockResearchTable = new Table(this, 'StockResearchTable', {
       tableName: TableName.StockResearch,
       partitionKey: { name: 'symbol', type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.RETAIN,
+      timeToLiveAttribute: 'ttl',
+    });
+
+    // "Today's recap" — one row per portfolio-day, rewritten through the day;
+    // rows carry a `ttl` attribute (~90d).
+    this.briefingsTable = new Table(this, 'BriefingsTable', {
+      tableName: TableName.Briefings,
+      partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
+      sortKey: { name: 'date', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
       timeToLiveAttribute: 'ttl',
