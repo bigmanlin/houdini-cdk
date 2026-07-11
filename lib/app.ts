@@ -45,6 +45,7 @@ const ecs = new EcsStack(app, 'EcsStack', {
   portfolioIntradayValueHistoryTable: ddb.portfolioIntradayValueHistoryTable,
   overviewIntradayValueHistoryTable: ddb.overviewIntradayValueHistoryTable,
   stockResearchTable: ddb.stockResearchTable,
+  briefingsTable: ddb.briefingsTable,
 });
 
 new EodLambdaStack(app, 'EodLambdaStack', {

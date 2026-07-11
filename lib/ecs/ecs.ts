@@ -29,6 +29,7 @@ interface EcsStackProps extends StackProps {
   portfolioIntradayValueHistoryTable: Table;
   overviewIntradayValueHistoryTable: Table;
   stockResearchTable: Table;
+  briefingsTable: Table;
 }
 
 export class EcsStack extends Stack {
@@ -60,6 +61,7 @@ export class EcsStack extends Stack {
       props.portfolioIntradayValueHistoryTable,
       props.overviewIntradayValueHistoryTable,
       props.stockResearchTable,
+      props.briefingsTable,
     ];
     tables.forEach((t) => t.grantReadWriteData(taskRole));
     props.strategiesBucket.grantReadWrite(taskRole);

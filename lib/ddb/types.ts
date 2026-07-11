@@ -11,6 +11,7 @@ export enum TableName {
   PortfolioIntradayValueHistory = 'portfolioIntradayValueHistory',
   OverviewIntradayValueHistory = 'overviewIntradayValueHistory',
   StockResearch = 'stockResearch',
+  Briefings = 'briefings',
 }
 
 export enum GsiName {
@@ -19,6 +20,7 @@ export enum GsiName {
   CronJobsByPortfolio = 'cronJobsByPortfolio',
   CronJobRunsByPortfolio = 'cronJobRunsByPortfolio',
   CronJobRunsByTime = 'cronJobRunsByTime',
+  RunsByPortfolioTime = 'runsByPortfolioTime',
   TradesByCronJob = 'tradesByCronJob',
   TradesByPortfolioTime = 'tradesByPortfolioTime',
   TransactionsByPortfolio = 'transactionsByPortfolio',

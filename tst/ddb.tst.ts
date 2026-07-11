@@ -8,8 +8,8 @@ describe('DdbStack', () => {
   const stack = new DdbStack(app, 'TestDdbStack');
   const template = Template.fromStack(stack);
 
-  test('creates 12 tables', () => {
-    template.resourceCountIs('AWS::DynamoDB::Table', 12);
+  test('creates 13 tables', () => {
+    template.resourceCountIs('AWS::DynamoDB::Table', 13);
   });
 
   test('all tables use PAY_PER_REQUEST billing', () => {
@@ -97,7 +97,25 @@ describe('DdbStack', () => {
             { AttributeName: 'executedAt', KeyType: 'RANGE' },
           ],
         },
+        {
+          IndexName: GsiName.RunsByPortfolioTime,
+          KeySchema: [
+            { AttributeName: 'portfolioId', KeyType: 'HASH' },
+            { AttributeName: 'executedAt', KeyType: 'RANGE' },
+          ],
+        },
       ],
+    });
+  });
+
+  test('briefings table has portfolioId + date composite key and TTL', () => {
+    template.hasResourceProperties('AWS::DynamoDB::Table', {
+      TableName: TableName.Briefings,
+      KeySchema: [
+        { AttributeName: 'portfolioId', KeyType: 'HASH' },
+        { AttributeName: 'date', KeyType: 'RANGE' },
+      ],
+      TimeToLiveSpecification: { AttributeName: 'ttl', Enabled: true },
     });
   });
 
