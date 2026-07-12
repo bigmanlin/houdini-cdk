@@ -190,15 +190,13 @@ export class DdbStack extends Stack {
       timeToLiveAttribute: 'ttl',
     });
 
-    // "Today's recap" — one row per portfolio-day, rewritten through the day;
-    // rows carry a `ttl` attribute (~90d).
+    // "Today's recap" — one living row per portfolio, overwritten on every
+    // rebuild.
     this.briefingsTable = new Table(this, 'BriefingsTable', {
-      tableName: TableName.Briefings,
+      tableName: TableName.Briefing,
       partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
-      sortKey: { name: 'date', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
-      timeToLiveAttribute: 'ttl',
     });
   }
 }

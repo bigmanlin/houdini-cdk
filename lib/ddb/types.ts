@@ -11,7 +11,7 @@ export enum TableName {
   PortfolioIntradayValueHistory = 'portfolioIntradayValueHistory',
   OverviewIntradayValueHistory = 'overviewIntradayValueHistory',
   StockResearch = 'stockResearch',
-  Briefings = 'briefings',
+  Briefing = 'briefing',
 }
 
 export enum GsiName {

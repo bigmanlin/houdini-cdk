@@ -108,14 +108,10 @@ describe('DdbStack', () => {
     });
   });
 
-  test('briefings table has portfolioId + date composite key and TTL', () => {
+  test('briefing table is keyed on portfolioId alone', () => {
     template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: TableName.Briefings,
-      KeySchema: [
-        { AttributeName: 'portfolioId', KeyType: 'HASH' },
-        { AttributeName: 'date', KeyType: 'RANGE' },
-      ],
-      TimeToLiveSpecification: { AttributeName: 'ttl', Enabled: true },
+      TableName: TableName.Briefing,
+      KeySchema: [{ AttributeName: 'portfolioId', KeyType: 'HASH' }],
     });
   });
 
