@@ -26,6 +26,7 @@ describe('EcsStack', () => {
     strategiesBucket: s3.strategiesBucket,
     uploadsBucket: s3.uploadsBucket,
     usersTable: ddb.usersTable,
+    identitiesTable: ddb.identitiesTable,
     portfoliosTable: ddb.portfoliosTable,
     positionsTable: ddb.positionsTable,
     tradesTable: ddb.tradesTable,

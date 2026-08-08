@@ -34,6 +34,7 @@ const ecs = new EcsStack(app, 'EcsStack', {
   strategiesBucket: s3.strategiesBucket,
   uploadsBucket: s3.uploadsBucket,
   usersTable: ddb.usersTable,
+  identitiesTable: ddb.identitiesTable,
   portfoliosTable: ddb.portfoliosTable,
   positionsTable: ddb.positionsTable,
   tradesTable: ddb.tradesTable,
@@ -50,15 +51,15 @@ const ecs = new EcsStack(app, 'EcsStack', {
 
 new EodLambdaStack(app, 'EodLambdaStack', {
   env,
-  internalApiUrl: `http://${ecs.loadBalancerDnsName}`,
+  internalApiUrl: ecs.apiUrl,
 });
 
 new IntradayLambdaStack(app, 'IntradayLambdaStack', {
   env,
-  internalApiUrl: `http://${ecs.loadBalancerDnsName}`,
+  internalApiUrl: ecs.apiUrl,
 });
 
 new StockResearchLambdaStack(app, 'StockResearchLambdaStack', {
   env,
-  internalApiUrl: `http://${ecs.loadBalancerDnsName}`,
+  internalApiUrl: ecs.apiUrl,
 });
