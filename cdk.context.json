@@ -42,5 +42,9 @@
         ]
       }
     ]
+  },
+  "hosted-zone:account=339640512039:domainName=tradehoudini.com:region=us-west-2": {
+    "Id": "/hostedzone/Z05139748CP4LCO9NCYZ",
+    "Name": "tradehoudini.com."
   }
 }

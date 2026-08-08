@@ -2,14 +2,22 @@ import { Stack, StackProps, Duration } from 'aws-cdk-lib';
 import { Vpc, SubnetType } from 'aws-cdk-lib/aws-ec2';
 import { Cluster, ContainerImage, Secret as EcsSecret, LogDrivers } from 'aws-cdk-lib/aws-ecs';
 import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
+import { ApplicationProtocol } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import { Repository } from 'aws-cdk-lib/aws-ecr';
 import { Role, ServicePrincipal, ManagedPolicy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+import { HostedZone } from 'aws-cdk-lib/aws-route53';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
+
+const ZONE_NAME = 'tradehoudini.com';
+const API_DOMAIN = `api.${ZONE_NAME}`;
+
+const AUTH0_DOMAIN = 'houdini-prod.us.auth0.com';
+const AUTH0_AUDIENCE = 'https://api.tradehoudini.com';
 
 interface EcsStackProps extends StackProps {
   repository: Repository;
@@ -18,6 +26,7 @@ interface EcsStackProps extends StackProps {
   strategiesBucket: Bucket;
   uploadsBucket: Bucket;
   usersTable: Table;
+  identitiesTable: Table;
   portfoliosTable: Table;
   positionsTable: Table;
   tradesTable: Table;
@@ -33,7 +42,9 @@ interface EcsStackProps extends StackProps {
 }
 
 export class EcsStack extends Stack {
-  public readonly loadBalancerDnsName: string;
+  // Callers must start on HTTPS rather than rely on the port 80 redirect: a 301
+  // downgrades a POST to GET, and the internal triggers are POSTs.
+  public readonly apiUrl: string;
 
   constructor(scope: Construct, id: string, props: EcsStackProps) {
     super(scope, id, props);
@@ -50,6 +61,7 @@ export class EcsStack extends Stack {
 
     const tables = [
       props.usersTable,
+      props.identitiesTable,
       props.portfoliosTable,
       props.positionsTable,
       props.tradesTable,
@@ -121,8 +133,16 @@ export class EcsStack extends Stack {
       retention: RetentionDays.ONE_MONTH,
     });
 
+    // The zone is registrar-created, not stack-owned, so it is looked up rather
+    // than declared. The pattern issues and DNS-validates the certificate itself.
+    const hostedZone = HostedZone.fromLookup(this, 'HoudiniZone', { domainName: ZONE_NAME });
+
     const service = new ApplicationLoadBalancedFargateService(this, 'HoudiniService', {
       cluster,
+      domainName: API_DOMAIN,
+      domainZone: hostedZone,
+      protocol: ApplicationProtocol.HTTPS,
+      redirectHTTP: true,
       memoryLimitMiB: 1024,
       cpu: 512,
       desiredCount: 1,
@@ -144,6 +164,8 @@ export class EcsStack extends Stack {
           UPLOADS_BUCKET: props.uploadsBucket.bucketName,
           CRON_JOB_QUEUE_ARN: props.cronJobQueue.queueArn,
           SCHEDULER_ROLE_ARN: props.schedulerRoleArn,
+          AUTH0_DOMAIN,
+          AUTH0_AUDIENCE,
         },
         secrets: {
           ALPACA_API_KEY: EcsSecret.fromSecretsManager(alpacaSecret, 'apiKey'),
@@ -175,6 +197,6 @@ export class EcsStack extends Stack {
       interval: Duration.seconds(30),
     });
 
-    this.loadBalancerDnsName = service.loadBalancer.loadBalancerDnsName;
+    this.apiUrl = `https://${API_DOMAIN}`;
   }
 }

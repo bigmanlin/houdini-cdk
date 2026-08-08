@@ -5,6 +5,7 @@ import { TableName, GsiName } from './types';
 
 export class DdbStack extends Stack {
   public readonly usersTable: Table;
+  public readonly identitiesTable: Table;
   public readonly portfoliosTable: Table;
   public readonly positionsTable: Table;
   public readonly tradesTable: Table;
@@ -26,6 +27,24 @@ export class DdbStack extends Stack {
       partitionKey: { name: 'userId', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    // One row per way of signing in — `sub#<auth0 sub>` and `email#<address>` — each
+    // pointing at the userId that owns it. The email row doubles as the uniqueness
+    // constraint behind "one verified email, one account": DynamoDB enforces it on the
+    // partition key, which is the only place it can be enforced at all.
+    this.identitiesTable = new Table(this, 'IdentitiesTable', {
+      tableName: TableName.Identities,
+      partitionKey: { name: 'identityKey', type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    // Account deletion has the userId and needs every identity row that points at it.
+    this.identitiesTable.addGlobalSecondaryIndex({
+      indexName: GsiName.IdentitiesByUser,
+      partitionKey: { name: 'userId', type: AttributeType.STRING },
+      projectionType: ProjectionType.KEYS_ONLY,
     });
 
     this.portfoliosTable = new Table(this, 'PortfoliosTable', {

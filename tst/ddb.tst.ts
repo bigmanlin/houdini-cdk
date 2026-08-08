@@ -8,8 +8,8 @@ describe('DdbStack', () => {
   const stack = new DdbStack(app, 'TestDdbStack');
   const template = Template.fromStack(stack);
 
-  test('creates 13 tables', () => {
-    template.resourceCountIs('AWS::DynamoDB::Table', 13);
+  test('creates 14 tables', () => {
+    template.resourceCountIs('AWS::DynamoDB::Table', 14);
   });
 
   test('all tables use PAY_PER_REQUEST billing', () => {
@@ -22,6 +22,19 @@ describe('DdbStack', () => {
     template.hasResourceProperties('AWS::DynamoDB::Table', {
       TableName: TableName.Users,
       KeySchema: [{ AttributeName: 'userId', KeyType: 'HASH' }],
+    });
+  });
+
+  test('identities table is keyed on identityKey with a userId GSI', () => {
+    template.hasResourceProperties('AWS::DynamoDB::Table', {
+      TableName: TableName.Identities,
+      KeySchema: [{ AttributeName: 'identityKey', KeyType: 'HASH' }],
+      GlobalSecondaryIndexes: [
+        {
+          IndexName: GsiName.IdentitiesByUser,
+          KeySchema: [{ AttributeName: 'userId', KeyType: 'HASH' }],
+        },
+      ],
     });
   });
 

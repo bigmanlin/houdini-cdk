@@ -1,5 +1,6 @@
 export enum TableName {
   Users = 'users',
+  Identities = 'identities',
   Portfolios = 'portfolios',
   Positions = 'positions',
   Trades = 'trades',
@@ -15,6 +16,7 @@ export enum TableName {
 }
 
 export enum GsiName {
+  IdentitiesByUser = 'identitiesByUser',
   PortfoliosByUser = 'portfoliosByUser',
   CronJobsByUser = 'cronJobsByUser',
   CronJobsByPortfolio = 'cronJobsByPortfolio',
