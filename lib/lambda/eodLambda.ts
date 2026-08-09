@@ -61,9 +61,12 @@ export class EodLambdaStack extends Stack {
       sourceAccount: this.account,
     });
 
-    // Fires at 4:30 PM ET on weekdays — 30 minutes after market close
+    // Superseded by the houdini-eod-task RunTask schedule (lib/ecs). Disabled
+    // and kept only as a fallback until the RunTask path is confirmed on a real
+    // scheduled fire, then this whole stack is removed.
     new CfnSchedule(this, 'EodSchedule', {
       name: 'houdini-eod',
+      state: 'DISABLED',
       scheduleExpression: 'cron(30 16 ? * MON-FRI *)',
       scheduleExpressionTimezone: 'America/New_York',
       flexibleTimeWindow: { mode: 'OFF' },

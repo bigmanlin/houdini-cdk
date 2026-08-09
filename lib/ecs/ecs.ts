@@ -219,9 +219,9 @@ export class EcsStack extends Stack {
     // same env + secrets, differing only by the command it runs. Timezone-aware
     // cron matches the legacy Lambda schedules so DST never shifts them.
     //
-    // Schedules ship DISABLED: deploy, verify a job with `aws ecs run-task`,
-    // then flip `enabled: true` here and set the matching Lambda CfnSchedule to
-    // `state: DISABLED` in the same deploy to cut over without double-firing.
+    // These are the live triggers for EOD/intraday/stock-research. The legacy
+    // Lambda triggers (lib/lambda/*) are disabled and pending removal once a
+    // real scheduled fire is confirmed.
     const NY = TimeZone.AMERICA_NEW_YORK;
     const jobs = [
       {
@@ -267,7 +267,7 @@ export class EcsStack extends Stack {
       new Schedule(this, `${job.id}JobSchedule`, {
         scheduleName: job.scheduleName,
         schedule: job.schedule,
-        enabled: false,
+        enabled: true,
         target: new EcsRunFargateTask(cluster, {
           taskDefinition,
           // Default VPC has no private subnets; matches how the service runs
