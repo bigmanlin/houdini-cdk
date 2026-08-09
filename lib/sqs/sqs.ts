@@ -18,11 +18,13 @@ export class SqsStack extends Stack {
     this.cronJobDlq = new Queue(this, 'CronJobDlq', {
       queueName: 'houdini-cron-job-dlq',
       encryption: QueueEncryption.SQS_MANAGED,
+      enforceSSL: true,
     });
 
     this.cronJobQueue = new Queue(this, 'CronJobQueue', {
       queueName: 'houdini-cron-job-queue',
       encryption: QueueEncryption.SQS_MANAGED,
+      enforceSSL: true,
       visibilityTimeout: Duration.seconds(VISIBILITY_TIMEOUT_SECONDS),
       deadLetterQueue: {
         queue: this.cronJobDlq,

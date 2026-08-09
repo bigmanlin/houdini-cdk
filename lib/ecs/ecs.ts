@@ -53,6 +53,8 @@ export class EcsStack extends Stack {
   // Callers must start on HTTPS rather than rely on the port 80 redirect: a 301
   // downgrades a POST to GET, and the internal triggers are POSTs.
   public readonly apiUrl: string;
+  // Consumed by the WAF stack, which associates a Web ACL to this ALB.
+  public readonly loadBalancerArn: string;
 
   constructor(scope: Construct, id: string, props: EcsStackProps) {
     super(scope, id, props);
@@ -96,7 +98,9 @@ export class EcsStack extends Stack {
       }),
     );
 
-    // createCronJobForPortfolio creates EventBridge schedules
+    // createCronJobForPortfolio creates EventBridge schedules, scoped to the
+    // houdini-cron-jobs group so the task can't touch schedules elsewhere in the
+    // account. The group name must match the CfnScheduleGroup in eventbridge.ts.
     taskRole.addToPolicy(
       new PolicyStatement({
         effect: Effect.ALLOW,
@@ -106,7 +110,7 @@ export class EcsStack extends Stack {
           'scheduler:GetSchedule',
           'scheduler:DeleteSchedule',
         ],
-        resources: ['*'],
+        resources: [`arn:aws:scheduler:${this.region}:${this.account}:schedule/houdini-cron-jobs/*`],
       }),
     );
     taskRole.addToPolicy(
@@ -279,5 +283,6 @@ export class EcsStack extends Stack {
     }
 
     this.apiUrl = `https://${API_DOMAIN}`;
+    this.loadBalancerArn = service.loadBalancer.loadBalancerArn;
   }
 }

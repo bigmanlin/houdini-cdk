@@ -3,6 +3,13 @@ import { AttributeType, BillingMode, Table, ProjectionType } from 'aws-cdk-lib/a
 import { Construct } from 'constructs';
 import { TableName, GsiName } from './types';
 
+// Continuous backups for the durable tables: RETAIN survives a stack delete,
+// but only PITR protects against a bad write or a console delete. The TTL'd,
+// rebuildable tables (intraday snapshots, stockResearch) are left out.
+const PITR = {
+  pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+};
+
 export class DdbStack extends Stack {
   public readonly usersTable: Table;
   public readonly identitiesTable: Table;
@@ -27,6 +34,7 @@ export class DdbStack extends Stack {
       partitionKey: { name: 'userId', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
     });
 
     // One row per way of signing in — `sub#<auth0 sub>` and `email#<address>` — each
@@ -38,6 +46,7 @@ export class DdbStack extends Stack {
       partitionKey: { name: 'identityKey', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
     });
 
     // Account deletion has the userId and needs every identity row that points at it.
@@ -52,6 +61,7 @@ export class DdbStack extends Stack {
       partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
     });
 
     this.portfoliosTable.addGlobalSecondaryIndex({
@@ -66,6 +76,7 @@ export class DdbStack extends Stack {
       sortKey: { name: 'symbol', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
     });
 
     this.tradesTable = new Table(this, 'TradesTable', {
@@ -74,6 +85,7 @@ export class DdbStack extends Stack {
       sortKey: { name: 'tradeId', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
     });
 
     this.tradesTable.addGlobalSecondaryIndex({
@@ -96,6 +108,7 @@ export class DdbStack extends Stack {
       partitionKey: { name: 'cronJobId', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
     });
 
     this.cronJobsTable.addGlobalSecondaryIndex({
@@ -116,6 +129,7 @@ export class DdbStack extends Stack {
       sortKey: { name: 'runId', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
     });
 
     this.cronJobRunsTable.addGlobalSecondaryIndex({
@@ -148,6 +162,7 @@ export class DdbStack extends Stack {
       sortKey: { name: 'transactionId', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
     });
 
     this.transactionsTable.addGlobalSecondaryIndex({
@@ -162,6 +177,7 @@ export class DdbStack extends Stack {
       sortKey: { name: 'date', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
     });
 
     this.portfolioEodValueHistoryTable.addGlobalSecondaryIndex({
@@ -177,6 +193,7 @@ export class DdbStack extends Stack {
       sortKey: { name: 'date', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
     });
 
     // Intraday tables hold 30-min value snapshots, keyed by slot boundary;
@@ -216,6 +233,7 @@ export class DdbStack extends Stack {
       partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
     });
   }
 }
