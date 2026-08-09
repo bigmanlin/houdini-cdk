@@ -137,7 +137,6 @@ export class EcsStack extends Stack {
     // import, so any job entrypoint that loads a service also loads this config.
     const containerEnvironment = {
       AWS_REGION: this.region,
-      ANTHROPIC_MODEL: 'claude-sonnet-4-6',
       STRATEGIES_BUCKET: props.strategiesBucket.bucketName,
       UPLOADS_BUCKET: props.uploadsBucket.bucketName,
       CRON_JOB_QUEUE_ARN: props.cronJobQueue.queueArn,
