@@ -1,8 +1,16 @@
-import { Stack, StackProps, Duration } from 'aws-cdk-lib';
+import { Stack, StackProps, Duration, TimeZone } from 'aws-cdk-lib';
 import { Vpc, SubnetType } from 'aws-cdk-lib/aws-ec2';
-import { Cluster, ContainerImage, Secret as EcsSecret, LogDrivers } from 'aws-cdk-lib/aws-ecs';
+import {
+  Cluster,
+  ContainerImage,
+  FargateTaskDefinition,
+  Secret as EcsSecret,
+  LogDrivers,
+} from 'aws-cdk-lib/aws-ecs';
 import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
 import { ApplicationProtocol } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import { Schedule, ScheduleExpression } from 'aws-cdk-lib/aws-scheduler';
+import { EcsRunFargateTask } from 'aws-cdk-lib/aws-scheduler-targets';
 import { Repository } from 'aws-cdk-lib/aws-ecr';
 import { Role, ServicePrincipal, ManagedPolicy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import { HostedZone } from 'aws-cdk-lib/aws-route53';
@@ -124,6 +132,27 @@ export class EcsStack extends Stack {
     fmpSecret.grantRead(executionRole);
     anthropicSecret.grantRead(executionRole);
 
+    // Container env + secrets shared by the always-on service and the scheduled
+    // job tasks below. They must match: config.ts validates the full set at
+    // import, so any job entrypoint that loads a service also loads this config.
+    const containerEnvironment = {
+      AWS_REGION: this.region,
+      ANTHROPIC_MODEL: 'claude-sonnet-4-6',
+      STRATEGIES_BUCKET: props.strategiesBucket.bucketName,
+      UPLOADS_BUCKET: props.uploadsBucket.bucketName,
+      CRON_JOB_QUEUE_ARN: props.cronJobQueue.queueArn,
+      SCHEDULER_ROLE_ARN: props.schedulerRoleArn,
+      AUTH0_DOMAIN,
+      AUTH0_AUDIENCE,
+    };
+
+    const containerSecrets = {
+      ALPACA_API_KEY: EcsSecret.fromSecretsManager(alpacaSecret, 'apiKey'),
+      ALPACA_API_SECRET: EcsSecret.fromSecretsManager(alpacaSecret, 'apiSecret'),
+      FMP_API_KEY: EcsSecret.fromSecretsManager(fmpSecret, 'apiKey'),
+      ANTHROPIC_API_KEY: EcsSecret.fromSecretsManager(anthropicSecret, 'apiKey'),
+    };
+
     // ── ECS + ALB ─────────────────────────────────────────────────────────────
     const vpc = Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
     const cluster = new Cluster(this, 'HoudiniCluster', { vpc, clusterName: 'HoudiniCluster' });
@@ -157,22 +186,8 @@ export class EcsStack extends Stack {
         containerPort: 3000,
         taskRole,
         executionRole,
-        environment: {
-          AWS_REGION: this.region,
-          ANTHROPIC_MODEL: 'claude-sonnet-4-6',
-          STRATEGIES_BUCKET: props.strategiesBucket.bucketName,
-          UPLOADS_BUCKET: props.uploadsBucket.bucketName,
-          CRON_JOB_QUEUE_ARN: props.cronJobQueue.queueArn,
-          SCHEDULER_ROLE_ARN: props.schedulerRoleArn,
-          AUTH0_DOMAIN,
-          AUTH0_AUDIENCE,
-        },
-        secrets: {
-          ALPACA_API_KEY: EcsSecret.fromSecretsManager(alpacaSecret, 'apiKey'),
-          ALPACA_API_SECRET: EcsSecret.fromSecretsManager(alpacaSecret, 'apiSecret'),
-          FMP_API_KEY: EcsSecret.fromSecretsManager(fmpSecret, 'apiKey'),
-          ANTHROPIC_API_KEY: EcsSecret.fromSecretsManager(anthropicSecret, 'apiKey'),
-        },
+        environment: containerEnvironment,
+        secrets: containerSecrets,
         logDriver: LogDrivers.awsLogs({
           logGroup,
           streamPrefix: 'ecs',
@@ -196,6 +211,73 @@ export class EcsStack extends Stack {
       path: '/',
       interval: Duration.seconds(30),
     });
+
+    // ── Scheduled jobs ────────────────────────────────────────────────────────
+    // EOD, intraday, and stock-research run as scheduled Fargate tasks
+    // (EventBridge Scheduler -> ECS RunTask), not public /internal HTTP routes.
+    // Each reuses the service image, task role, execution role, and the exact
+    // same env + secrets, differing only by the command it runs. Timezone-aware
+    // cron matches the legacy Lambda schedules so DST never shifts them.
+    //
+    // Schedules ship DISABLED: deploy, verify a job with `aws ecs run-task`,
+    // then flip `enabled: true` here and set the matching Lambda CfnSchedule to
+    // `state: DISABLED` in the same deploy to cut over without double-firing.
+    const NY = TimeZone.AMERICA_NEW_YORK;
+    const jobs = [
+      {
+        id: 'Eod',
+        scheduleName: 'houdini-eod-task',
+        command: ['node', 'dist/jobs/eod.js'],
+        // 4:30 PM ET weekdays — 30 min after close
+        schedule: ScheduleExpression.cron({ minute: '30', hour: '16', weekDay: 'MON-FRI', timeZone: NY }),
+      },
+      {
+        id: 'Intraday',
+        scheduleName: 'houdini-intraday-task',
+        command: ['node', 'dist/jobs/intraday.js'],
+        // Every 30 min, 9:00–16:30 ET weekdays; the job's slot gate filters fires
+        schedule: ScheduleExpression.cron({ minute: '0/30', hour: '9-16', weekDay: 'MON-FRI', timeZone: NY }),
+      },
+      {
+        id: 'StockResearch',
+        scheduleName: 'houdini-stock-research-task',
+        command: ['node', 'dist/jobs/stockResearch.js'],
+        // 8:00 AM ET weekdays — pre-market cache warm
+        schedule: ScheduleExpression.cron({ minute: '0', hour: '8', weekDay: 'MON-FRI', timeZone: NY }),
+      },
+    ];
+
+    for (const job of jobs) {
+      const taskDefinition = new FargateTaskDefinition(this, `${job.id}JobTaskDef`, {
+        family: job.scheduleName.replace(/-task$/, '-job'),
+        cpu: 512,
+        memoryLimitMiB: 1024,
+        taskRole,
+        executionRole,
+      });
+
+      taskDefinition.addContainer(`${job.id}JobContainer`, {
+        image: ContainerImage.fromEcrRepository(props.repository, 'latest'),
+        command: job.command,
+        environment: containerEnvironment,
+        secrets: containerSecrets,
+        logging: LogDrivers.awsLogs({ logGroup, streamPrefix: 'jobs' }),
+      });
+
+      new Schedule(this, `${job.id}JobSchedule`, {
+        scheduleName: job.scheduleName,
+        schedule: job.schedule,
+        enabled: false,
+        target: new EcsRunFargateTask(cluster, {
+          taskDefinition,
+          // Default VPC has no private subnets; matches how the service runs
+          // today (revisit under the private-VPC backlog item).
+          vpcSubnets: { subnetType: SubnetType.PUBLIC },
+          assignPublicIp: true,
+          retryAttempts: 2,
+        }),
+      });
+    }
 
     this.apiUrl = `https://${API_DOMAIN}`;
   }
