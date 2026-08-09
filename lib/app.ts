@@ -5,6 +5,7 @@ import { SqsStack } from './sqs/sqs';
 import { EventBridgeStack } from './eventbridge/eventbridge';
 import { EcrStack } from './ecr/ecr';
 import { EcsStack } from './ecs/ecs';
+import { WafStack } from './waf/waf';
 import { EodLambdaStack } from './lambda/eodLambda';
 import { IntradayLambdaStack } from './lambda/intradayLambda';
 import { StockResearchLambdaStack } from './lambda/stockResearchLambda';
@@ -62,4 +63,9 @@ new IntradayLambdaStack(app, 'IntradayLambdaStack', {
 new StockResearchLambdaStack(app, 'StockResearchLambdaStack', {
   env,
   internalApiUrl: ecs.apiUrl,
+});
+
+new WafStack(app, 'WafStack', {
+  env,
+  loadBalancerArn: ecs.loadBalancerArn,
 });

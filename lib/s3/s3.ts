@@ -1,5 +1,5 @@
 import { Stack, StackProps, RemovalPolicy, Duration } from 'aws-cdk-lib';
-import { Bucket, BucketEncryption } from 'aws-cdk-lib/aws-s3';
+import { Bucket, BucketEncryption, BlockPublicAccess } from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 
 export class S3Stack extends Stack {
@@ -13,6 +13,8 @@ export class S3Stack extends Stack {
       bucketName: `houdini-strategies-${this.account}-${this.region}`,
       versioned: true,
       encryption: BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
       removalPolicy: RemovalPolicy.RETAIN,
     });
 
@@ -21,6 +23,8 @@ export class S3Stack extends Stack {
     this.uploadsBucket = new Bucket(this, 'UploadsBucket', {
       bucketName: `houdini-uploads-${this.account}-${this.region}`,
       encryption: BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
       removalPolicy: RemovalPolicy.RETAIN,
       lifecycleRules: [{ prefix: 'tmp/', expiration: Duration.days(2) }],
     });

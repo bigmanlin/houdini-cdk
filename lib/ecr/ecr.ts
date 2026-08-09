@@ -11,6 +11,7 @@ export class EcrStack extends Stack {
     this.repository = new Repository(this, 'HoudiniRepository', {
       repositoryName: 'houdini',
       imageTagMutability: TagMutability.MUTABLE,
+      imageScanOnPush: true,
       removalPolicy: RemovalPolicy.RETAIN,
     });
   }
