@@ -65,8 +65,12 @@ export class StockResearchLambdaStack extends Stack {
 
     // Fires at 8:00 AM ET on weekdays — pre-market, so the Tier 2 research
     // cache is fresh before the first cron job runs at market open
+    // Superseded by the houdini-stock-research-task RunTask schedule (lib/ecs).
+    // Disabled and kept only as a fallback until the RunTask path is confirmed
+    // on a real scheduled fire, then this whole stack is removed.
     new CfnSchedule(this, 'StockResearchSchedule', {
       name: 'houdini-stock-research-daily',
+      state: 'DISABLED',
       scheduleExpression: 'cron(0 8 ? * MON-FRI *)',
       scheduleExpressionTimezone: 'America/New_York',
       flexibleTimeWindow: { mode: 'OFF' },

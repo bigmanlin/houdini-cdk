@@ -65,8 +65,12 @@ export class IntradayLambdaStack extends Stack {
     // session gate decides which fires actually record (skips pre-open 9:00,
     // post-close 16:30, holidays, and half-day afternoons). Timezone-aware
     // cron, so DST never shifts it.
+    // Superseded by the houdini-intraday-task RunTask schedule (lib/ecs).
+    // Disabled and kept only as a fallback until the RunTask path is confirmed
+    // on a real scheduled fire, then this whole stack is removed.
     new CfnSchedule(this, 'IntradaySchedule', {
       name: 'houdini-intraday',
+      state: 'DISABLED',
       scheduleExpression: 'cron(0/30 9-16 ? * MON-FRI *)',
       scheduleExpressionTimezone: 'America/New_York',
       flexibleTimeWindow: { mode: 'OFF' },
