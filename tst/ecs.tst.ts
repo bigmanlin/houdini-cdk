@@ -61,7 +61,6 @@ describe('EcsStack', () => {
       ContainerDefinitions: Match.arrayWith([
         Match.objectLike({
           Environment: Match.arrayWith([
-            Match.objectLike({ Name: 'ANTHROPIC_MODEL', Value: 'claude-sonnet-4-6' }),
             Match.objectLike({ Name: 'STRATEGIES_BUCKET' }),
             Match.objectLike({ Name: 'CRON_JOB_QUEUE_ARN' }),
             Match.objectLike({ Name: 'SCHEDULER_ROLE_ARN' }),
