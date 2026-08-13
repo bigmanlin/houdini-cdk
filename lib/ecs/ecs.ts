@@ -121,8 +121,10 @@ export class EcsStack extends Stack {
       }),
     );
 
-    // The app consumes the cron job queue directly (receive/delete)
+    // The app consumes the cron job queue directly (receive/delete), and
+    // enqueues a portfolio's first run at launch.
     props.cronJobQueue.grantConsumeMessages(taskRole);
+    props.cronJobQueue.grantSendMessages(taskRole);
 
     // Execution role — ECS agent uses this to pull the image and fetch secrets
     const executionRole = new Role(this, 'ExecutionRole', {
@@ -238,8 +240,9 @@ export class EcsStack extends Stack {
         id: 'Intraday',
         scheduleName: 'houdini-intraday-task',
         command: ['node', 'dist/jobs/intraday.js'],
-        // Every 30 min, 9:00–16:30 ET weekdays; the job's slot gate filters fires
-        schedule: ScheduleExpression.cron({ minute: '0/30', hour: '9-16', weekDay: 'MON-FRI', timeZone: NY }),
+        // Offset from the half hour so the snapshot's reads never straddle the
+        // trade runs that cluster on round minutes; the job floors fires to slots.
+        schedule: ScheduleExpression.cron({ minute: '5/30', hour: '9-16', weekDay: 'MON-FRI', timeZone: NY }),
       },
       {
         id: 'StockResearch',
