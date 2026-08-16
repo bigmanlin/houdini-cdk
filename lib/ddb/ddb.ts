@@ -108,6 +108,7 @@ export class DdbStack extends Stack {
       partitionKey: { name: 'cronJobId', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      timeToLiveAttribute: 'ttl',
       ...PITR,
     });
 
