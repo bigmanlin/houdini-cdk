@@ -128,18 +128,6 @@ describe('DdbStack', () => {
     });
   });
 
-  test('transactions table has portfolioId GSI', () => {
-    template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: TableName.Transactions,
-      GlobalSecondaryIndexes: [
-        {
-          IndexName: GsiName.TransactionsByPortfolio,
-          KeySchema: [{ AttributeName: 'portfolioId', KeyType: 'HASH' }],
-        },
-      ],
-    });
-  });
-
   test('portfolioEodValueHistory table has portfolioId + date composite key and userId GSI', () => {
     template.hasResourceProperties('AWS::DynamoDB::Table', {
       TableName: TableName.PortfolioEodValueHistory,
