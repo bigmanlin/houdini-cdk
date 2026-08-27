@@ -32,13 +32,13 @@ describe('EcsStack', () => {
     tradesTable: ddb.tradesTable,
     cronJobsTable: ddb.cronJobsTable,
     cronJobRunsTable: ddb.cronJobRunsTable,
-    transactionsTable: ddb.transactionsTable,
     portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
     overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
     portfolioIntradayValueHistoryTable: ddb.portfolioIntradayValueHistoryTable,
     overviewIntradayValueHistoryTable: ddb.overviewIntradayValueHistoryTable,
     stockResearchTable: ddb.stockResearchTable,
     briefingsTable: ddb.briefingsTable,
+    brokerConnectionsTable: ddb.brokerConnectionsTable,
   });
   const template = Template.fromStack(stack);
 

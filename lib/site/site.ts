@@ -2,11 +2,15 @@ import { Stack, StackProps, RemovalPolicy, Duration } from 'aws-cdk-lib';
 import { Bucket, BucketEncryption, BlockPublicAccess } from 'aws-cdk-lib/aws-s3';
 import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
 import {
+  AllowedMethods,
+  BehaviorOptions,
+  CachePolicy,
   Distribution,
+  OriginRequestPolicy,
   ViewerProtocolPolicy,
   PriceClass,
 } from 'aws-cdk-lib/aws-cloudfront';
-import { S3BucketOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
+import { HttpOrigin, S3BucketOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
 import { Certificate, CertificateValidation } from 'aws-cdk-lib/aws-certificatemanager';
 import { HostedZone, ARecord, AaaaRecord, RecordTarget } from 'aws-cdk-lib/aws-route53';
 import { CloudFrontTarget } from 'aws-cdk-lib/aws-route53-targets';
@@ -43,10 +47,31 @@ export class SiteStack extends Stack {
       validation: CertificateValidation.fromDns(hostedZone),
     });
 
+    // By hostname, not by the load balancer object: the API lives in another
+    // region, and referencing it directly would make this stack a cross-region
+    // consumer for what is only ever a DNS name.
+    const apiOrigin = new HttpOrigin(`api.${ZONE_NAME}`);
+
+    // Account pages the API serves. Nothing here is cacheable — a callback is
+    // single-use and a form POST has no cached answer — and the callback carries
+    // `code` and `state`, so the whole query string has to reach the origin.
+    const apiBehavior: BehaviorOptions = {
+      origin: apiOrigin,
+      viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      allowedMethods: AllowedMethods.ALLOW_ALL,
+      cachePolicy: CachePolicy.CACHING_DISABLED,
+      originRequestPolicy: OriginRequestPolicy.ALL_VIEWER,
+    };
+
     const distribution = new Distribution(this, 'SiteDistribution', {
       defaultBehavior: {
         origin: S3BucketOrigin.withOriginAccessControl(bucket),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      },
+      additionalBehaviors: {
+        '/connect': apiBehavior,
+        '/connect/*': apiBehavior,
+        '/auth/*': apiBehavior,
       },
       domainNames: [ZONE_NAME, `www.${ZONE_NAME}`],
       certificate,

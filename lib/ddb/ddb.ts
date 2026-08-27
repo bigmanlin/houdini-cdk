@@ -18,13 +18,13 @@ export class DdbStack extends Stack {
   public readonly tradesTable: Table;
   public readonly cronJobsTable: Table;
   public readonly cronJobRunsTable: Table;
-  public readonly transactionsTable: Table;
   public readonly portfolioEodValueHistoryTable: Table;
   public readonly overviewEodValueHistoryTable: Table;
   public readonly portfolioIntradayValueHistoryTable: Table;
   public readonly overviewIntradayValueHistoryTable: Table;
   public readonly stockResearchTable: Table;
   public readonly briefingsTable: Table;
+  public readonly brokerConnectionsTable: Table;
 
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
@@ -108,6 +108,7 @@ export class DdbStack extends Stack {
       partitionKey: { name: 'cronJobId', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      timeToLiveAttribute: 'ttl',
       ...PITR,
     });
 
@@ -153,21 +154,6 @@ export class DdbStack extends Stack {
       indexName: GsiName.RunsByPortfolioTime,
       partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
       sortKey: { name: 'executedAt', type: AttributeType.STRING },
-      projectionType: ProjectionType.ALL,
-    });
-
-    this.transactionsTable = new Table(this, 'TransactionsTable', {
-      tableName: TableName.Transactions,
-      partitionKey: { name: 'userId', type: AttributeType.STRING },
-      sortKey: { name: 'transactionId', type: AttributeType.STRING },
-      billingMode: BillingMode.PAY_PER_REQUEST,
-      removalPolicy: RemovalPolicy.RETAIN,
-      ...PITR,
-    });
-
-    this.transactionsTable.addGlobalSecondaryIndex({
-      indexName: GsiName.TransactionsByPortfolio,
-      partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
       projectionType: ProjectionType.ALL,
     });
 
@@ -233,6 +219,19 @@ export class DdbStack extends Stack {
       partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
+    });
+
+    // Brokerage OAuth: live connections and the short-lived attempts that create
+    // them, separated by a key prefix. The TTL only reaps abandoned attempts —
+    // a completed one is deleted as it is exchanged, and connections carry no
+    // expiry attribute at all.
+    this.brokerConnectionsTable = new Table(this, 'BrokerConnectionsTable', {
+      tableName: TableName.BrokerConnections,
+      partitionKey: { name: 'connectionKey', type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.RETAIN,
+      timeToLiveAttribute: 'expiresAtEpoch',
       ...PITR,
     });
   }

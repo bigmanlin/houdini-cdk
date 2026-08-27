@@ -27,6 +27,11 @@ const API_DOMAIN = `api.${ZONE_NAME}`;
 const AUTH0_DOMAIN = 'houdini-prod.us.auth0.com';
 const AUTH0_AUDIENCE = 'https://api.tradehoudini.com';
 
+// Loopback is the only redirect Robinhood's shared public client whitelists, and
+// nothing serves it: the user copies the dead address back into /connect. Once a
+// client of our own is provisioned this becomes an address we actually host.
+const ROBINHOOD_REDIRECT_URI = 'http://localhost:8080/callback';
+
 interface EcsStackProps extends StackProps {
   repository: Repository;
   cronJobQueue: Queue;
@@ -40,13 +45,13 @@ interface EcsStackProps extends StackProps {
   tradesTable: Table;
   cronJobsTable: Table;
   cronJobRunsTable: Table;
-  transactionsTable: Table;
   portfolioEodValueHistoryTable: Table;
   overviewEodValueHistoryTable: Table;
   portfolioIntradayValueHistoryTable: Table;
   overviewIntradayValueHistoryTable: Table;
   stockResearchTable: Table;
   briefingsTable: Table;
+  brokerConnectionsTable: Table;
 }
 
 export class EcsStack extends Stack {
@@ -77,13 +82,13 @@ export class EcsStack extends Stack {
       props.tradesTable,
       props.cronJobsTable,
       props.cronJobRunsTable,
-      props.transactionsTable,
       props.portfolioEodValueHistoryTable,
       props.overviewEodValueHistoryTable,
       props.portfolioIntradayValueHistoryTable,
       props.overviewIntradayValueHistoryTable,
       props.stockResearchTable,
       props.briefingsTable,
+      props.brokerConnectionsTable,
     ];
     tables.forEach((t) => t.grantReadWriteData(taskRole));
     props.strategiesBucket.grantReadWrite(taskRole);
@@ -121,8 +126,10 @@ export class EcsStack extends Stack {
       }),
     );
 
-    // The app consumes the cron job queue directly (receive/delete)
+    // The app consumes the cron job queue directly (receive/delete), and
+    // enqueues a portfolio's first run at launch.
     props.cronJobQueue.grantConsumeMessages(taskRole);
+    props.cronJobQueue.grantSendMessages(taskRole);
 
     // Execution role — ECS agent uses this to pull the image and fetch secrets
     const executionRole = new Role(this, 'ExecutionRole', {
@@ -147,6 +154,7 @@ export class EcsStack extends Stack {
       SCHEDULER_ROLE_ARN: props.schedulerRoleArn,
       AUTH0_DOMAIN,
       AUTH0_AUDIENCE,
+      ROBINHOOD_REDIRECT_URI,
     };
 
     const containerSecrets = {
@@ -238,8 +246,8 @@ export class EcsStack extends Stack {
         id: 'Intraday',
         scheduleName: 'houdini-intraday-task',
         command: ['node', 'dist/jobs/intraday.js'],
-        // Every 30 min, 9:00–16:30 ET weekdays; the job's slot gate filters fires
-        schedule: ScheduleExpression.cron({ minute: '0/30', hour: '9-16', weekDay: 'MON-FRI', timeZone: NY }),
+        schedule: ScheduleExpression.cron({ minute: '0/5', hour: '9-16', weekDay: 'MON-FRI', timeZone: NY }),
+        maxEventAge: Duration.minutes(4),
       },
       {
         id: 'StockResearch',
@@ -278,6 +286,7 @@ export class EcsStack extends Stack {
           vpcSubnets: { subnetType: SubnetType.PUBLIC },
           assignPublicIp: true,
           retryAttempts: 2,
+          ...(job.maxEventAge ? { maxEventAge: job.maxEventAge } : {}),
         }),
       });
     }

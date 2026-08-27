@@ -6,13 +6,13 @@ export enum TableName {
   Trades = 'trades',
   CronJobs = 'cronJobs',
   CronJobRuns = 'cronJobRuns',
-  Transactions = 'transactions',
   PortfolioEodValueHistory = 'portfolioEodValueHistory',
   OverviewEodValueHistory = 'overviewEodValueHistory',
   PortfolioIntradayValueHistory = 'portfolioIntradayValueHistory',
   OverviewIntradayValueHistory = 'overviewIntradayValueHistory',
   StockResearch = 'stockResearch',
   Briefing = 'briefing',
+  BrokerConnections = 'brokerConnections',
 }
 
 export enum GsiName {
@@ -25,6 +25,5 @@ export enum GsiName {
   RunsByPortfolioTime = 'runsByPortfolioTime',
   TradesByCronJob = 'tradesByCronJob',
   TradesByPortfolioTime = 'tradesByPortfolioTime',
-  TransactionsByPortfolio = 'transactionsByPortfolio',
   PortfolioEodValueHistoryByUser = 'portfolioEodValueHistoryByUser',
 }
