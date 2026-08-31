@@ -25,6 +25,7 @@ export class DdbStack extends Stack {
   public readonly stockResearchTable: Table;
   public readonly briefingsTable: Table;
   public readonly brokerConnectionsTable: Table;
+  public readonly deviceTokensTable: Table;
 
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
@@ -233,6 +234,18 @@ export class DdbStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
       timeToLiveAttribute: 'expiresAtEpoch',
       ...PITR,
+    });
+
+    // One row per device a user has the app on, so a notification reaches every
+    // one of them. Apple retires a token whenever the app is reinstalled or
+    // moved between build environments, and the sender deletes what it is told
+    // is gone — the table is a cache of live tokens, never a record to keep.
+    this.deviceTokensTable = new Table(this, 'DeviceTokensTable', {
+      tableName: TableName.DeviceTokens,
+      partitionKey: { name: 'userId', type: AttributeType.STRING },
+      sortKey: { name: 'token', type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.RETAIN,
     });
   }
 }

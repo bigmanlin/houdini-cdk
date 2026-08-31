@@ -55,6 +55,7 @@ const ecs = new EcsStack(app, 'EcsStack', {
   stockResearchTable: ddb.stockResearchTable,
   briefingsTable: ddb.briefingsTable,
   brokerConnectionsTable: ddb.brokerConnectionsTable,
+  deviceTokensTable: ddb.deviceTokensTable,
 });
 
 new EodLambdaStack(app, 'EodLambdaStack', {
