@@ -13,6 +13,7 @@ export enum TableName {
   StockResearch = 'stockResearch',
   Briefing = 'briefing',
   BrokerConnections = 'brokerConnections',
+  DeviceTokens = 'deviceTokens',
 }
 
 export enum GsiName {
