@@ -32,6 +32,12 @@ const AUTH0_AUDIENCE = 'https://api.tradehoudini.com';
 // client of our own is provisioned this becomes an address we actually host.
 const ROBINHOOD_REDIRECT_URI = 'http://localhost:8080/callback';
 
+const APNS_BUNDLE_ID = 'com.tradehoudini.houdini';
+
+// Sandbox while the app is installed from Xcode; TestFlight and App Store
+// builds mint production tokens instead, and the two hosts reject each other's.
+const APNS_ENV = 'sandbox';
+
 interface EcsStackProps extends StackProps {
   repository: Repository;
   cronJobQueue: Queue;
@@ -52,6 +58,7 @@ interface EcsStackProps extends StackProps {
   stockResearchTable: Table;
   briefingsTable: Table;
   brokerConnectionsTable: Table;
+  deviceTokensTable: Table;
 }
 
 export class EcsStack extends Stack {
@@ -65,9 +72,11 @@ export class EcsStack extends Stack {
     super(scope, id, props);
 
     // ── Secrets ───────────────────────────────────────────────────────────────
+    const massiveSecret = Secret.fromSecretNameV2(this, 'MassiveSecret', 'houdini/massive');
     const alpacaSecret = Secret.fromSecretNameV2(this, 'AlpacaSecret', 'houdini/alpaca');
     const fmpSecret = Secret.fromSecretNameV2(this, 'FmpSecret', 'houdini/fmp');
     const anthropicSecret = Secret.fromSecretNameV2(this, 'AnthropicSecret', 'houdini/anthropic');
+    const apnsSecret = Secret.fromSecretNameV2(this, 'ApnsSecret', 'houdini/apns');
 
     // ── IAM ───────────────────────────────────────────────────────────────────
     const taskRole = new Role(this, 'TaskRole', {
@@ -89,6 +98,7 @@ export class EcsStack extends Stack {
       props.stockResearchTable,
       props.briefingsTable,
       props.brokerConnectionsTable,
+      props.deviceTokensTable,
     ];
     tables.forEach((t) => t.grantReadWriteData(taskRole));
     props.strategiesBucket.grantReadWrite(taskRole);
@@ -139,6 +149,7 @@ export class EcsStack extends Stack {
       ],
     });
 
+    massiveSecret.grantRead(executionRole);
     alpacaSecret.grantRead(executionRole);
     fmpSecret.grantRead(executionRole);
     anthropicSecret.grantRead(executionRole);
@@ -155,13 +166,22 @@ export class EcsStack extends Stack {
       AUTH0_DOMAIN,
       AUTH0_AUDIENCE,
       ROBINHOOD_REDIRECT_URI,
+      APNS_BUNDLE_ID,
+      // Tokens minted by an Xcode build only answer to Apple's sandbox host;
+      // TestFlight and App Store builds mint production ones. Same key signs
+      // for both, so the switch is this line and a redeploy.
+      APNS_ENV,
     };
 
     const containerSecrets = {
+      MASSIVE_API_KEY: EcsSecret.fromSecretsManager(massiveSecret, 'apiKey'),
       ALPACA_API_KEY: EcsSecret.fromSecretsManager(alpacaSecret, 'apiKey'),
       ALPACA_API_SECRET: EcsSecret.fromSecretsManager(alpacaSecret, 'apiSecret'),
       FMP_API_KEY: EcsSecret.fromSecretsManager(fmpSecret, 'apiKey'),
       ANTHROPIC_API_KEY: EcsSecret.fromSecretsManager(anthropicSecret, 'apiKey'),
+      APNS_KEY: EcsSecret.fromSecretsManager(apnsSecret, 'key'),
+      APNS_KEY_ID: EcsSecret.fromSecretsManager(apnsSecret, 'keyId'),
+      APNS_TEAM_ID: EcsSecret.fromSecretsManager(apnsSecret, 'teamId'),
     };
 
     // ── ECS + ALB ─────────────────────────────────────────────────────────────
@@ -246,7 +266,7 @@ export class EcsStack extends Stack {
         id: 'Intraday',
         scheduleName: 'houdini-intraday-task',
         command: ['node', 'dist/jobs/intraday.js'],
-        schedule: ScheduleExpression.cron({ minute: '0/5', hour: '9-16', weekDay: 'MON-FRI', timeZone: NY }),
+        schedule: ScheduleExpression.cron({ minute: '0/5', hour: '4-20', weekDay: 'MON-FRI', timeZone: NY }),
         maxEventAge: Duration.minutes(4),
       },
       {

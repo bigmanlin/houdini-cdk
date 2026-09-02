@@ -39,6 +39,7 @@ describe('EcsStack', () => {
     stockResearchTable: ddb.stockResearchTable,
     briefingsTable: ddb.briefingsTable,
     brokerConnectionsTable: ddb.brokerConnectionsTable,
+    deviceTokensTable: ddb.deviceTokensTable,
   });
   const template = Template.fromStack(stack);
 
