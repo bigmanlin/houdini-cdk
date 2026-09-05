@@ -18,6 +18,8 @@ export class DdbStack extends Stack {
   public readonly tradesTable: Table;
   public readonly cronJobsTable: Table;
   public readonly cronJobRunsTable: Table;
+  public readonly agentsTable: Table;
+  public readonly activityTable: Table;
   public readonly portfolioEodValueHistoryTable: Table;
   public readonly overviewEodValueHistoryTable: Table;
   public readonly portfolioIntradayValueHistoryTable: Table;
@@ -155,6 +157,43 @@ export class DdbStack extends Stack {
       indexName: GsiName.RunsByPortfolioTime,
       partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
       sortKey: { name: 'executedAt', type: AttributeType.STRING },
+      projectionType: ProjectionType.ALL,
+    });
+
+    // A strategy deployed on an account: its schedule, status, and last wake.
+    // One live agent per account; archived ones stay as the record behind
+    // their activity, found through the account they traded.
+    this.agentsTable = new Table(this, 'AgentsTable', {
+      tableName: TableName.Agents,
+      partitionKey: { name: 'agentId', type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.RETAIN,
+      timeToLiveAttribute: 'ttl',
+      ...PITR,
+    });
+
+    this.agentsTable.addGlobalSecondaryIndex({
+      indexName: GsiName.AgentsByPortfolio,
+      partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
+      projectionType: ProjectionType.ALL,
+    });
+
+    // What an agent did, one row per event: a review, an entry, an exit, a
+    // refusal, a rebuild. A wake that found nothing writes no row. The feed
+    // reads an agent's rows newest first; the portfolio page reads across agents.
+    this.activityTable = new Table(this, 'ActivityTable', {
+      tableName: TableName.Activity,
+      partitionKey: { name: 'agentId', type: AttributeType.STRING },
+      sortKey: { name: 'at', type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
+    });
+
+    this.activityTable.addGlobalSecondaryIndex({
+      indexName: GsiName.ActivityByPortfolio,
+      partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
+      sortKey: { name: 'at', type: AttributeType.STRING },
       projectionType: ProjectionType.ALL,
     });
 

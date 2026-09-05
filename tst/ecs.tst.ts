@@ -2,8 +2,6 @@ import { App } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
 import { DdbStack } from '../lib/ddb/ddb';
 import { S3Stack } from '../lib/s3/s3';
-import { SqsStack } from '../lib/sqs/sqs';
-import { EventBridgeStack } from '../lib/eventbridge/eventbridge';
 import { EcrStack } from '../lib/ecr/ecr';
 import { EcsStack } from '../lib/ecs/ecs';
 
@@ -12,17 +10,10 @@ describe('EcsStack', () => {
   const app = new App();
   const ddb = new DdbStack(app, 'TestDdbStack', { env });
   const s3 = new S3Stack(app, 'TestS3Stack', { env });
-  const sqs = new SqsStack(app, 'TestSqsStack', { env });
-  const eventbridge = new EventBridgeStack(app, 'TestEventBridgeStack', {
-    env,
-    cronJobQueue: sqs.cronJobQueue,
-  });
   const ecr = new EcrStack(app, 'TestEcrStack', { env });
   const stack = new EcsStack(app, 'TestEcsStack', {
     env,
     repository: ecr.repository,
-    cronJobQueue: sqs.cronJobQueue,
-    schedulerRoleArn: eventbridge.schedulerRole.roleArn,
     strategiesBucket: s3.strategiesBucket,
     uploadsBucket: s3.uploadsBucket,
     usersTable: ddb.usersTable,
@@ -32,6 +23,8 @@ describe('EcsStack', () => {
     tradesTable: ddb.tradesTable,
     cronJobsTable: ddb.cronJobsTable,
     cronJobRunsTable: ddb.cronJobRunsTable,
+    agentsTable: ddb.agentsTable,
+    activityTable: ddb.activityTable,
     portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
     overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
     portfolioIntradayValueHistoryTable: ddb.portfolioIntradayValueHistoryTable,
@@ -43,11 +36,16 @@ describe('EcsStack', () => {
   });
   const template = Template.fromStack(stack);
 
-  test('creates a Fargate service', () => {
-    template.resourceCountIs('AWS::ECS::Service', 1);
+  test('runs the API behind the load balancer and the worker beside it', () => {
+    template.resourceCountIs('AWS::ECS::Service', 2);
+    template.hasResourceProperties('AWS::ECS::Service', { ServiceName: 'HoudiniService' });
+    template.hasResourceProperties('AWS::ECS::Service', {
+      ServiceName: 'HoudiniWorker',
+      LoadBalancers: Match.absent(),
+    });
   });
 
-  test('task definition targets port 3000', () => {
+  test('the API task definition targets port 3000', () => {
     template.hasResourceProperties('AWS::ECS::TaskDefinition', {
       ContainerDefinitions: Match.arrayWith([
         Match.objectLike({
@@ -57,18 +55,43 @@ describe('EcsStack', () => {
     });
   });
 
-  test('task definition has plaintext environment variables', () => {
+  test('the worker runs the worker entry point from the same image and env', () => {
     template.hasResourceProperties('AWS::ECS::TaskDefinition', {
+      Family: 'houdini-worker',
       ContainerDefinitions: Match.arrayWith([
         Match.objectLike({
-          Environment: Match.arrayWith([
-            Match.objectLike({ Name: 'STRATEGIES_BUCKET' }),
-            Match.objectLike({ Name: 'CRON_JOB_QUEUE_ARN' }),
-            Match.objectLike({ Name: 'SCHEDULER_ROLE_ARN' }),
-          ]),
+          Command: ['node', 'dist/worker.js'],
+          Environment: Match.arrayWith([Match.objectLike({ Name: 'STRATEGIES_BUCKET' })]),
+          Secrets: Match.arrayWith([Match.objectLike({ Name: 'ANTHROPIC_API_KEY' })]),
         }),
       ]),
     });
+  });
+
+  test('the worker scales to one before the open and to none after the close, weekdays in New York', () => {
+    template.hasResourceProperties('AWS::ApplicationAutoScaling::ScalableTarget', {
+      MinCapacity: 0,
+      MaxCapacity: 1,
+      ScheduledActions: Match.arrayWith([
+        Match.objectLike({
+          Schedule: 'cron(45 6 ? * MON-FRI *)',
+          Timezone: 'America/New_York',
+          ScalableTargetAction: { MinCapacity: 1, MaxCapacity: 1 },
+        }),
+        Match.objectLike({
+          Schedule: 'cron(15 17 ? * MON-FRI *)',
+          Timezone: 'America/New_York',
+          ScalableTargetAction: { MinCapacity: 0, MaxCapacity: 0 },
+        }),
+      ]),
+    });
+  });
+
+  test('no task carries queue or scheduler settings any more', () => {
+    const definitions = template.findResources('AWS::ECS::TaskDefinition');
+    expect(JSON.stringify(definitions)).not.toContain('CRON_JOB_QUEUE_ARN');
+    expect(JSON.stringify(definitions)).not.toContain('SCHEDULER_ROLE_ARN');
+    template.resourceCountIs('AWS::Scheduler::Schedule', 0);
   });
 
   test('task definition injects secrets from Secrets Manager', () => {
@@ -95,6 +118,8 @@ describe('EcsStack', () => {
     expect(policyJson).toContain('dynamodb:PutItem');
     expect(policyJson).toContain('dynamodb:GetItem');
     expect(policyJson).toContain('dynamodb:UpdateItem');
+    expect(policyJson).not.toContain('scheduler:CreateSchedule');
+    expect(policyJson).not.toContain('sqs:');
   });
 
   test('task role has S3 read/write permission on strategies bucket', () => {
@@ -105,16 +130,6 @@ describe('EcsStack', () => {
     const policyJson = JSON.stringify(policies);
     expect(policyJson).toContain('s3:PutObject');
     expect(policyJson).toContain('s3:GetObject*');
-  });
-
-  test('task role can create EventBridge schedules', () => {
-    const policies = {
-      ...template.findResources('AWS::IAM::Policy'),
-      ...template.findResources('AWS::IAM::ManagedPolicy'),
-    };
-    const policyJson = JSON.stringify(policies);
-    expect(policyJson).toContain('scheduler:CreateSchedule');
-    expect(policyJson).toContain('iam:PassRole');
   });
 
   test('ALB is internet-facing', () => {
