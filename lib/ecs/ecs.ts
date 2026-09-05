@@ -3,19 +3,18 @@ import { Vpc, SubnetType } from 'aws-cdk-lib/aws-ec2';
 import {
   Cluster,
   ContainerImage,
+  FargateService,
   FargateTaskDefinition,
   Secret as EcsSecret,
   LogDrivers,
 } from 'aws-cdk-lib/aws-ecs';
 import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
 import { ApplicationProtocol } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
-import { Schedule, ScheduleExpression } from 'aws-cdk-lib/aws-scheduler';
-import { EcsRunFargateTask } from 'aws-cdk-lib/aws-scheduler-targets';
+import { Schedule } from 'aws-cdk-lib/aws-applicationautoscaling';
 import { Repository } from 'aws-cdk-lib/aws-ecr';
 import { Role, ServicePrincipal, ManagedPolicy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import { HostedZone } from 'aws-cdk-lib/aws-route53';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
-import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
@@ -40,8 +39,6 @@ const APNS_ENV = 'sandbox';
 
 interface EcsStackProps extends StackProps {
   repository: Repository;
-  cronJobQueue: Queue;
-  schedulerRoleArn: string;
   strategiesBucket: Bucket;
   uploadsBucket: Bucket;
   usersTable: Table;
@@ -51,6 +48,8 @@ interface EcsStackProps extends StackProps {
   tradesTable: Table;
   cronJobsTable: Table;
   cronJobRunsTable: Table;
+  agentsTable: Table;
+  activityTable: Table;
   portfolioEodValueHistoryTable: Table;
   overviewEodValueHistoryTable: Table;
   portfolioIntradayValueHistoryTable: Table;
@@ -63,7 +62,7 @@ interface EcsStackProps extends StackProps {
 
 export class EcsStack extends Stack {
   // Callers must start on HTTPS rather than rely on the port 80 redirect: a 301
-  // downgrades a POST to GET, and the internal triggers are POSTs.
+  // downgrades a POST to GET.
   public readonly apiUrl: string;
   // Consumed by the WAF stack, which associates a Web ACL to this ALB.
   public readonly loadBalancerArn: string;
@@ -91,6 +90,8 @@ export class EcsStack extends Stack {
       props.tradesTable,
       props.cronJobsTable,
       props.cronJobRunsTable,
+      props.agentsTable,
+      props.activityTable,
       props.portfolioEodValueHistoryTable,
       props.overviewEodValueHistoryTable,
       props.portfolioIntradayValueHistoryTable,
@@ -113,34 +114,6 @@ export class EcsStack extends Stack {
       }),
     );
 
-    // createCronJobForPortfolio creates EventBridge schedules, scoped to the
-    // houdini-cron-jobs group so the task can't touch schedules elsewhere in the
-    // account. The group name must match the CfnScheduleGroup in eventbridge.ts.
-    taskRole.addToPolicy(
-      new PolicyStatement({
-        effect: Effect.ALLOW,
-        actions: [
-          'scheduler:CreateSchedule',
-          'scheduler:UpdateSchedule',
-          'scheduler:GetSchedule',
-          'scheduler:DeleteSchedule',
-        ],
-        resources: [`arn:aws:scheduler:${this.region}:${this.account}:schedule/houdini-cron-jobs/*`],
-      }),
-    );
-    taskRole.addToPolicy(
-      new PolicyStatement({
-        effect: Effect.ALLOW,
-        actions: ['iam:PassRole'],
-        resources: [props.schedulerRoleArn],
-      }),
-    );
-
-    // The app consumes the cron job queue directly (receive/delete), and
-    // enqueues a portfolio's first run at launch.
-    props.cronJobQueue.grantConsumeMessages(taskRole);
-    props.cronJobQueue.grantSendMessages(taskRole);
-
     // Execution role — ECS agent uses this to pull the image and fetch secrets
     const executionRole = new Role(this, 'ExecutionRole', {
       assumedBy: new ServicePrincipal('ecs-tasks.amazonaws.com'),
@@ -154,15 +127,12 @@ export class EcsStack extends Stack {
     fmpSecret.grantRead(executionRole);
     anthropicSecret.grantRead(executionRole);
 
-    // Container env + secrets shared by the always-on service and the scheduled
-    // job tasks below. They must match: config.ts validates the full set at
-    // import, so any job entrypoint that loads a service also loads this config.
+    // Container env + secrets shared by the API and the worker. They must match:
+    // config.ts validates the full set at import, and both entry points load it.
     const containerEnvironment = {
       AWS_REGION: this.region,
       STRATEGIES_BUCKET: props.strategiesBucket.bucketName,
       UPLOADS_BUCKET: props.uploadsBucket.bucketName,
-      CRON_JOB_QUEUE_ARN: props.cronJobQueue.queueArn,
-      SCHEDULER_ROLE_ARN: props.schedulerRoleArn,
       AUTH0_DOMAIN,
       AUTH0_AUDIENCE,
       ROBINHOOD_REDIRECT_URI,
@@ -197,6 +167,8 @@ export class EcsStack extends Stack {
     // than declared. The pattern issues and DNS-validates the certificate itself.
     const hostedZone = HostedZone.fromLookup(this, 'HoudiniZone', { domainName: ZONE_NAME });
 
+    const image = ContainerImage.fromEcrRepository(props.repository, 'latest');
+
     const service = new ApplicationLoadBalancedFargateService(this, 'HoudiniService', {
       cluster,
       domainName: API_DOMAIN,
@@ -213,7 +185,7 @@ export class EcsStack extends Stack {
       loadBalancerName: 'HoudiniALB',
       serviceName: 'HoudiniService',
       taskImageOptions: {
-        image: ContainerImage.fromEcrRepository(props.repository, 'latest'),
+        image,
         containerPort: 3000,
         taskRole,
         executionRole,
@@ -243,73 +215,53 @@ export class EcsStack extends Stack {
       interval: Duration.seconds(30),
     });
 
-    // ── Scheduled jobs ────────────────────────────────────────────────────────
-    // EOD, intraday, and stock-research run as scheduled Fargate tasks
-    // (EventBridge Scheduler -> ECS RunTask), not public /internal HTTP routes.
-    // Each reuses the service image, task role, execution role, and the exact
-    // same env + secrets, differing only by the command it runs. Timezone-aware
-    // cron matches the legacy Lambda schedules so DST never shifts them.
-    //
-    // These are the live triggers for EOD/intraday/stock-research. The legacy
-    // Lambda triggers (lib/lambda/*) are disabled and pending removal once a
-    // real scheduled fire is confirmed.
+    // ── Worker ────────────────────────────────────────────────────────────────
+    // The worker owns time: agents' wakes, the intraday valuation, and the
+    // end-of-day pass all run on its minute clock. Same image, same role, same
+    // env; only the command differs. It answers no requests, so it sits behind
+    // no load balancer, and it runs on market days from before the open to
+    // after the end-of-day pass, scaling to nothing overnight and at weekends.
+    const workerTaskDefinition = new FargateTaskDefinition(this, 'WorkerTaskDef', {
+      family: 'houdini-worker',
+      cpu: 1024,
+      memoryLimitMiB: 2048,
+      taskRole,
+      executionRole,
+    });
+
+    workerTaskDefinition.addContainer('WorkerContainer', {
+      image,
+      command: ['node', 'dist/worker.js'],
+      environment: containerEnvironment,
+      secrets: containerSecrets,
+      logging: LogDrivers.awsLogs({ logGroup, streamPrefix: 'worker' }),
+    });
+
+    const worker = new FargateService(this, 'HoudiniWorker', {
+      cluster,
+      serviceName: 'HoudiniWorker',
+      taskDefinition: workerTaskDefinition,
+      desiredCount: 1,
+      minHealthyPercent: 0,
+      maxHealthyPercent: 100,
+      assignPublicIp: true,
+      vpcSubnets: { subnetType: SubnetType.PUBLIC },
+    });
+
+    const workerScaling = worker.autoScaleTaskCount({ minCapacity: 0, maxCapacity: 1 });
     const NY = TimeZone.AMERICA_NEW_YORK;
-    const jobs = [
-      {
-        id: 'Eod',
-        scheduleName: 'houdini-eod-task',
-        command: ['node', 'dist/jobs/eod.js'],
-        // 4:30 PM ET weekdays — 30 min after close
-        schedule: ScheduleExpression.cron({ minute: '30', hour: '16', weekDay: 'MON-FRI', timeZone: NY }),
-      },
-      {
-        id: 'Intraday',
-        scheduleName: 'houdini-intraday-task',
-        command: ['node', 'dist/jobs/intraday.js'],
-        schedule: ScheduleExpression.cron({ minute: '0/5', hour: '4-20', weekDay: 'MON-FRI', timeZone: NY }),
-        maxEventAge: Duration.minutes(4),
-      },
-      {
-        id: 'StockResearch',
-        scheduleName: 'houdini-stock-research-task',
-        command: ['node', 'dist/jobs/stockResearch.js'],
-        // 8:00 AM ET weekdays — pre-market cache warm
-        schedule: ScheduleExpression.cron({ minute: '0', hour: '8', weekDay: 'MON-FRI', timeZone: NY }),
-      },
-    ];
-
-    for (const job of jobs) {
-      const taskDefinition = new FargateTaskDefinition(this, `${job.id}JobTaskDef`, {
-        family: job.scheduleName.replace(/-task$/, '-job'),
-        cpu: 512,
-        memoryLimitMiB: 1024,
-        taskRole,
-        executionRole,
-      });
-
-      taskDefinition.addContainer(`${job.id}JobContainer`, {
-        image: ContainerImage.fromEcrRepository(props.repository, 'latest'),
-        command: job.command,
-        environment: containerEnvironment,
-        secrets: containerSecrets,
-        logging: LogDrivers.awsLogs({ logGroup, streamPrefix: 'jobs' }),
-      });
-
-      new Schedule(this, `${job.id}JobSchedule`, {
-        scheduleName: job.scheduleName,
-        schedule: job.schedule,
-        enabled: true,
-        target: new EcsRunFargateTask(cluster, {
-          taskDefinition,
-          // Default VPC has no private subnets; matches how the service runs
-          // today (revisit under the private-VPC backlog item).
-          vpcSubnets: { subnetType: SubnetType.PUBLIC },
-          assignPublicIp: true,
-          retryAttempts: 2,
-          ...(job.maxEventAge ? { maxEventAge: job.maxEventAge } : {}),
-        }),
-      });
-    }
+    workerScaling.scaleOnSchedule('MarketOpen', {
+      schedule: Schedule.cron({ minute: '45', hour: '6', weekDay: 'MON-FRI' }),
+      timeZone: NY,
+      minCapacity: 1,
+      maxCapacity: 1,
+    });
+    workerScaling.scaleOnSchedule('MarketClosed', {
+      schedule: Schedule.cron({ minute: '15', hour: '17', weekDay: 'MON-FRI' }),
+      timeZone: NY,
+      minCapacity: 0,
+      maxCapacity: 0,
+    });
 
     this.apiUrl = `https://${API_DOMAIN}`;
     this.loadBalancerArn = service.loadBalancer.loadBalancerArn;

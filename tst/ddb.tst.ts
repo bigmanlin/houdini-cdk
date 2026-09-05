@@ -8,8 +8,41 @@ describe('DdbStack', () => {
   const stack = new DdbStack(app, 'TestDdbStack');
   const template = Template.fromStack(stack);
 
-  test('creates 15 tables', () => {
-    template.resourceCountIs('AWS::DynamoDB::Table', 15);
+  test('creates 17 tables', () => {
+    template.resourceCountIs('AWS::DynamoDB::Table', 17);
+  });
+
+  test('agents table is keyed by agent with a portfolio index and a TTL', () => {
+    template.hasResourceProperties('AWS::DynamoDB::Table', {
+      TableName: TableName.Agents,
+      KeySchema: [{ AttributeName: 'agentId', KeyType: 'HASH' }],
+      GlobalSecondaryIndexes: [
+        {
+          IndexName: GsiName.AgentsByPortfolio,
+          KeySchema: [{ AttributeName: 'portfolioId', KeyType: 'HASH' }],
+        },
+      ],
+      TimeToLiveSpecification: { AttributeName: 'ttl', Enabled: true },
+    });
+  });
+
+  test('activity table is keyed by agent and instant, with a portfolio index in time order', () => {
+    template.hasResourceProperties('AWS::DynamoDB::Table', {
+      TableName: TableName.Activity,
+      KeySchema: [
+        { AttributeName: 'agentId', KeyType: 'HASH' },
+        { AttributeName: 'at', KeyType: 'RANGE' },
+      ],
+      GlobalSecondaryIndexes: [
+        {
+          IndexName: GsiName.ActivityByPortfolio,
+          KeySchema: [
+            { AttributeName: 'portfolioId', KeyType: 'HASH' },
+            { AttributeName: 'at', KeyType: 'RANGE' },
+          ],
+        },
+      ],
+    });
   });
 
   test('all tables use PAY_PER_REQUEST billing', () => {

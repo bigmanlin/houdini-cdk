@@ -29,7 +29,9 @@ const s3 = new S3Stack(app, 'S3Stack', { env });
 const sqs = new SqsStack(app, 'SqsStack', { env });
 const ecr = new EcrStack(app, 'EcrStack', { env });
 
-const eventbridge = new EventBridgeStack(app, 'EventBridgeStack', {
+// The queue and scheduler stacks stay constructed, unreferenced, for one deploy:
+// the ECS stack must drop its imports of them before they can be destroyed.
+new EventBridgeStack(app, 'EventBridgeStack', {
   env,
   cronJobQueue: sqs.cronJobQueue,
 });
@@ -37,8 +39,6 @@ const eventbridge = new EventBridgeStack(app, 'EventBridgeStack', {
 const ecs = new EcsStack(app, 'EcsStack', {
   env,
   repository: ecr.repository,
-  cronJobQueue: sqs.cronJobQueue,
-  schedulerRoleArn: eventbridge.schedulerRole.roleArn,
   strategiesBucket: s3.strategiesBucket,
   uploadsBucket: s3.uploadsBucket,
   usersTable: ddb.usersTable,
@@ -48,6 +48,8 @@ const ecs = new EcsStack(app, 'EcsStack', {
   tradesTable: ddb.tradesTable,
   cronJobsTable: ddb.cronJobsTable,
   cronJobRunsTable: ddb.cronJobRunsTable,
+  agentsTable: ddb.agentsTable,
+  activityTable: ddb.activityTable,
   portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
   overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
   portfolioIntradayValueHistoryTable: ddb.portfolioIntradayValueHistoryTable,
