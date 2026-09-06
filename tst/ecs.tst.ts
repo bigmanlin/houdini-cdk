@@ -3,6 +3,7 @@ import { Template, Match } from 'aws-cdk-lib/assertions';
 import { DdbStack } from '../lib/ddb/ddb';
 import { S3Stack } from '../lib/s3/s3';
 import { EcrStack } from '../lib/ecr/ecr';
+import { SqsStack } from '../lib/sqs/sqs';
 import { EcsStack } from '../lib/ecs/ecs';
 
 describe('EcsStack', () => {
@@ -11,6 +12,7 @@ describe('EcsStack', () => {
   const ddb = new DdbStack(app, 'TestDdbStack', { env });
   const s3 = new S3Stack(app, 'TestS3Stack', { env });
   const ecr = new EcrStack(app, 'TestEcrStack', { env });
+  const sqs = new SqsStack(app, 'TestSqsStack', { env });
   const stack = new EcsStack(app, 'TestEcsStack', {
     env,
     repository: ecr.repository,
@@ -33,8 +35,29 @@ describe('EcsStack', () => {
     briefingsTable: ddb.briefingsTable,
     brokerConnectionsTable: ddb.brokerConnectionsTable,
     deviceTokensTable: ddb.deviceTokensTable,
+    workerQueue: sqs.workerQueue,
   });
   const template = Template.fromStack(stack);
+
+  test('both tasks know the worker queue, and the one role may send to it and consume it', () => {
+    template.hasResourceProperties('AWS::ECS::TaskDefinition', {
+      ContainerDefinitions: Match.arrayWith([
+        Match.objectLike({
+          Environment: Match.arrayWith([
+            Match.objectLike({ Name: 'WORKER_QUEUE_URL' }),
+          ]),
+        }),
+      ]),
+    });
+    // The role's grants overflow one inline policy into managed ones.
+    const policies = JSON.stringify({
+      ...template.findResources('AWS::IAM::Policy'),
+      ...template.findResources('AWS::IAM::ManagedPolicy'),
+    });
+    expect(policies).toContain('sqs:SendMessage');
+    expect(policies).toContain('sqs:ReceiveMessage');
+    expect(policies).toContain('sqs:DeleteMessage');
+  });
 
   test('runs the API behind the load balancer and the worker beside it', () => {
     template.resourceCountIs('AWS::ECS::Service', 2);
@@ -68,23 +91,16 @@ describe('EcsStack', () => {
     });
   });
 
-  test('the worker scales to one before the open and to none after the close, weekdays in New York', () => {
-    template.hasResourceProperties('AWS::ApplicationAutoScaling::ScalableTarget', {
-      MinCapacity: 0,
-      MaxCapacity: 1,
-      ScheduledActions: Match.arrayWith([
-        Match.objectLike({
-          Schedule: 'cron(45 6 ? * MON-FRI *)',
-          Timezone: 'America/New_York',
-          ScalableTargetAction: { MinCapacity: 1, MaxCapacity: 1 },
-        }),
-        Match.objectLike({
-          Schedule: 'cron(15 17 ? * MON-FRI *)',
-          Timezone: 'America/New_York',
-          ScalableTargetAction: { MinCapacity: 0, MaxCapacity: 0 },
-        }),
-      ]),
+  test('the worker runs as exactly one task around the clock', () => {
+    template.hasResourceProperties('AWS::ECS::Service', {
+      ServiceName: 'HoudiniWorker',
+      DesiredCount: 1,
     });
+    const targets = template.findResources('AWS::ApplicationAutoScaling::ScalableTarget');
+    const workerTargets = Object.values(targets).filter((target) =>
+      JSON.stringify(target).includes('HoudiniWorker'),
+    );
+    expect(workerTargets).toHaveLength(0);
   });
 
   test('no task carries queue or scheduler settings any more', () => {
@@ -119,7 +135,7 @@ describe('EcsStack', () => {
     expect(policyJson).toContain('dynamodb:GetItem');
     expect(policyJson).toContain('dynamodb:UpdateItem');
     expect(policyJson).not.toContain('scheduler:CreateSchedule');
-    expect(policyJson).not.toContain('sqs:');
+    expect(policyJson).not.toContain('CronJobQueue');
   });
 
   test('task role has S3 read/write permission on strategies bucket', () => {

@@ -1,5 +1,5 @@
 import { App, Duration } from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
+import { Template, Match } from 'aws-cdk-lib/assertions';
 import { SqsStack } from '../lib/sqs/sqs';
 
 describe('SqsStack', () => {
@@ -7,8 +7,16 @@ describe('SqsStack', () => {
   const stack = new SqsStack(app, 'TestSqsStack');
   const template = Template.fromStack(stack);
 
-  test('creates 2 queues', () => {
-    template.resourceCountIs('AWS::SQS::Queue', 2);
+  test('creates 3 queues', () => {
+    template.resourceCountIs('AWS::SQS::Queue', 3);
+  });
+
+  test('the worker queue long polls and needs no dead letter queue', () => {
+    template.hasResourceProperties('AWS::SQS::Queue', {
+      QueueName: 'atrius-worker-queue',
+      ReceiveMessageWaitTimeSeconds: 20,
+      RedrivePolicy: Match.absent(),
+    });
   });
 
   test('main queue has correct visibility timeout', () => {

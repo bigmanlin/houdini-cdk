@@ -1,4 +1,4 @@
-import { Stack, StackProps, Duration, TimeZone } from 'aws-cdk-lib';
+import { Stack, StackProps, Duration } from 'aws-cdk-lib';
 import { Vpc, SubnetType } from 'aws-cdk-lib/aws-ec2';
 import {
   Cluster,
@@ -10,13 +10,13 @@ import {
 } from 'aws-cdk-lib/aws-ecs';
 import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
 import { ApplicationProtocol } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
-import { Schedule } from 'aws-cdk-lib/aws-applicationautoscaling';
 import { Repository } from 'aws-cdk-lib/aws-ecr';
 import { Role, ServicePrincipal, ManagedPolicy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import { HostedZone } from 'aws-cdk-lib/aws-route53';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
+import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 
@@ -58,6 +58,7 @@ interface EcsStackProps extends StackProps {
   briefingsTable: Table;
   brokerConnectionsTable: Table;
   deviceTokensTable: Table;
+  workerQueue: Queue;
 }
 
 export class EcsStack extends Stack {
@@ -103,6 +104,9 @@ export class EcsStack extends Stack {
     ];
     tables.forEach((t) => t.grantReadWriteData(taskRole));
     props.strategiesBucket.grantReadWrite(taskRole);
+    // One role for both tasks: the API sends the nudge, the worker receives it.
+    props.workerQueue.grantSendMessages(taskRole);
+    props.workerQueue.grantConsumeMessages(taskRole);
     // Chat attachments: the app only presigns PUT/GET against the temp prefix, so
     // grant exactly those two actions (least privilege, and keeps the role's
     // policy small enough to avoid being split into an overflow managed policy).
@@ -133,6 +137,7 @@ export class EcsStack extends Stack {
       AWS_REGION: this.region,
       STRATEGIES_BUCKET: props.strategiesBucket.bucketName,
       UPLOADS_BUCKET: props.uploadsBucket.bucketName,
+      WORKER_QUEUE_URL: props.workerQueue.queueUrl,
       AUTH0_DOMAIN,
       AUTH0_AUDIENCE,
       ROBINHOOD_REDIRECT_URI,
@@ -216,11 +221,11 @@ export class EcsStack extends Stack {
     });
 
     // ── Worker ────────────────────────────────────────────────────────────────
-    // The worker owns time: agents' wakes, the intraday valuation, and the
-    // end-of-day pass all run on its minute clock. Same image, same role, same
-    // env; only the command differs. It answers no requests, so it sits behind
-    // no load balancer, and it runs on market days from before the open to
-    // after the end-of-day pass, scaling to nothing overnight and at weekends.
+    // The worker owns time: agents' wakes, the intraday valuation, the end of
+    // day pass, and strategy builds all run on its minute clock. Same image,
+    // same role, same env; only the command differs. It answers no requests,
+    // so it sits behind no load balancer. It runs around the clock because an
+    // owner deploys at any hour and the build must land before the next open.
     const workerTaskDefinition = new FargateTaskDefinition(this, 'WorkerTaskDef', {
       family: 'houdini-worker',
       cpu: 1024,
@@ -237,7 +242,8 @@ export class EcsStack extends Stack {
       logging: LogDrivers.awsLogs({ logGroup, streamPrefix: 'worker' }),
     });
 
-    const worker = new FargateService(this, 'HoudiniWorker', {
+    // One task, never two: a second worker would wake every agent twice.
+    new FargateService(this, 'HoudiniWorker', {
       cluster,
       serviceName: 'HoudiniWorker',
       taskDefinition: workerTaskDefinition,
@@ -246,21 +252,6 @@ export class EcsStack extends Stack {
       maxHealthyPercent: 100,
       assignPublicIp: true,
       vpcSubnets: { subnetType: SubnetType.PUBLIC },
-    });
-
-    const workerScaling = worker.autoScaleTaskCount({ minCapacity: 0, maxCapacity: 1 });
-    const NY = TimeZone.AMERICA_NEW_YORK;
-    workerScaling.scaleOnSchedule('MarketOpen', {
-      schedule: Schedule.cron({ minute: '45', hour: '6', weekDay: 'MON-FRI' }),
-      timeZone: NY,
-      minCapacity: 1,
-      maxCapacity: 1,
-    });
-    workerScaling.scaleOnSchedule('MarketClosed', {
-      schedule: Schedule.cron({ minute: '15', hour: '17', weekDay: 'MON-FRI' }),
-      timeZone: NY,
-      minCapacity: 0,
-      maxCapacity: 0,
     });
 
     this.apiUrl = `https://${API_DOMAIN}`;

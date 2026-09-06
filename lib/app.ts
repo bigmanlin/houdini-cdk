@@ -58,6 +58,7 @@ const ecs = new EcsStack(app, 'EcsStack', {
   briefingsTable: ddb.briefingsTable,
   brokerConnectionsTable: ddb.brokerConnectionsTable,
   deviceTokensTable: ddb.deviceTokensTable,
+  workerQueue: sqs.workerQueue,
 });
 
 new EodLambdaStack(app, 'EodLambdaStack', {
