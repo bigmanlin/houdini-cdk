@@ -16,6 +16,13 @@ export class S3Stack extends Stack {
       enforceSSL: true,
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
       removalPolicy: RemovalPolicy.RETAIN,
+      lifecycleRules: [
+        {
+          prefix: 'runs/',
+          expiration: Duration.days(30),
+          noncurrentVersionExpiration: Duration.days(1),
+        },
+      ],
     });
 
     // Temp bucket for chat attachments. Objects under `tmp/` are ephemeral, so a
