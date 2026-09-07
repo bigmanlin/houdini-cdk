@@ -45,17 +45,12 @@ interface EcsStackProps extends StackProps {
   identitiesTable: Table;
   portfoliosTable: Table;
   positionsTable: Table;
-  tradesTable: Table;
-  cronJobsTable: Table;
-  cronJobRunsTable: Table;
   agentsTable: Table;
   activityTable: Table;
   portfolioEodValueHistoryTable: Table;
   overviewEodValueHistoryTable: Table;
   portfolioIntradayValueHistoryTable: Table;
   overviewIntradayValueHistoryTable: Table;
-  stockResearchTable: Table;
-  briefingsTable: Table;
   brokerConnectionsTable: Table;
   deviceTokensTable: Table;
   workerQueue: Queue;
@@ -88,17 +83,12 @@ export class EcsStack extends Stack {
       props.identitiesTable,
       props.portfoliosTable,
       props.positionsTable,
-      props.tradesTable,
-      props.cronJobsTable,
-      props.cronJobRunsTable,
       props.agentsTable,
       props.activityTable,
       props.portfolioEodValueHistoryTable,
       props.overviewEodValueHistoryTable,
       props.portfolioIntradayValueHistoryTable,
       props.overviewIntradayValueHistoryTable,
-      props.stockResearchTable,
-      props.briefingsTable,
       props.brokerConnectionsTable,
       props.deviceTokensTable,
     ];

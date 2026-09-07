@@ -8,8 +8,8 @@ describe('DdbStack', () => {
   const stack = new DdbStack(app, 'TestDdbStack');
   const template = Template.fromStack(stack);
 
-  test('creates 17 tables', () => {
-    template.resourceCountIs('AWS::DynamoDB::Table', 17);
+  test('creates 12 tables', () => {
+    template.resourceCountIs('AWS::DynamoDB::Table', 12);
   });
 
   test('agents table is keyed by agent with a portfolio index and a TTL', () => {
@@ -90,74 +90,6 @@ describe('DdbStack', () => {
         { AttributeName: 'portfolioId', KeyType: 'HASH' },
         { AttributeName: 'symbol', KeyType: 'RANGE' },
       ],
-    });
-  });
-
-  test('trades table has cronJobId and portfolioId+timestamp GSIs', () => {
-    template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: TableName.Trades,
-      GlobalSecondaryIndexes: [
-        {
-          IndexName: GsiName.TradesByCronJob,
-          KeySchema: [{ AttributeName: 'cronJobId', KeyType: 'HASH' }],
-        },
-        {
-          IndexName: GsiName.TradesByPortfolioTime,
-          KeySchema: [
-            { AttributeName: 'portfolioId', KeyType: 'HASH' },
-            { AttributeName: 'timestamp', KeyType: 'RANGE' },
-          ],
-        },
-      ],
-    });
-  });
-
-  test('cronJobs table has userId and portfolioId GSIs', () => {
-    template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: TableName.CronJobs,
-      GlobalSecondaryIndexes: [
-        {
-          IndexName: GsiName.CronJobsByUser,
-          KeySchema: [{ AttributeName: 'userId', KeyType: 'HASH' }],
-        },
-        {
-          IndexName: GsiName.CronJobsByPortfolio,
-          KeySchema: [{ AttributeName: 'portfolioId', KeyType: 'HASH' }],
-        },
-      ],
-    });
-  });
-
-  test('cronJobRuns table has portfolioId and cronJobId+executedAt GSIs', () => {
-    template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: TableName.CronJobRuns,
-      GlobalSecondaryIndexes: [
-        {
-          IndexName: GsiName.CronJobRunsByPortfolio,
-          KeySchema: [{ AttributeName: 'portfolioId', KeyType: 'HASH' }],
-        },
-        {
-          IndexName: GsiName.CronJobRunsByTime,
-          KeySchema: [
-            { AttributeName: 'cronJobId', KeyType: 'HASH' },
-            { AttributeName: 'executedAt', KeyType: 'RANGE' },
-          ],
-        },
-        {
-          IndexName: GsiName.RunsByPortfolioTime,
-          KeySchema: [
-            { AttributeName: 'portfolioId', KeyType: 'HASH' },
-            { AttributeName: 'executedAt', KeyType: 'RANGE' },
-          ],
-        },
-      ],
-    });
-  });
-
-  test('briefing table is keyed on portfolioId alone', () => {
-    template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: TableName.Briefing,
-      KeySchema: [{ AttributeName: 'portfolioId', KeyType: 'HASH' }],
     });
   });
 

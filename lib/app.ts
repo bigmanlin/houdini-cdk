@@ -2,14 +2,10 @@ import { App } from 'aws-cdk-lib';
 import { DdbStack } from './ddb/ddb';
 import { S3Stack } from './s3/s3';
 import { SqsStack } from './sqs/sqs';
-import { EventBridgeStack } from './eventbridge/eventbridge';
 import { EcrStack } from './ecr/ecr';
 import { EcsStack } from './ecs/ecs';
 import { WafStack } from './waf/waf';
 import { SiteStack } from './site/site';
-import { EodLambdaStack } from './lambda/eodLambda';
-import { IntradayLambdaStack } from './lambda/intradayLambda';
-import { StockResearchLambdaStack } from './lambda/stockResearchLambda';
 
 const app = new App();
 
@@ -29,13 +25,6 @@ const s3 = new S3Stack(app, 'S3Stack', { env });
 const sqs = new SqsStack(app, 'SqsStack', { env });
 const ecr = new EcrStack(app, 'EcrStack', { env });
 
-// The queue and scheduler stacks stay constructed, unreferenced, for one deploy:
-// the ECS stack must drop its imports of them before they can be destroyed.
-new EventBridgeStack(app, 'EventBridgeStack', {
-  env,
-  cronJobQueue: sqs.cronJobQueue,
-});
-
 const ecs = new EcsStack(app, 'EcsStack', {
   env,
   repository: ecr.repository,
@@ -45,35 +34,15 @@ const ecs = new EcsStack(app, 'EcsStack', {
   identitiesTable: ddb.identitiesTable,
   portfoliosTable: ddb.portfoliosTable,
   positionsTable: ddb.positionsTable,
-  tradesTable: ddb.tradesTable,
-  cronJobsTable: ddb.cronJobsTable,
-  cronJobRunsTable: ddb.cronJobRunsTable,
   agentsTable: ddb.agentsTable,
   activityTable: ddb.activityTable,
   portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
   overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
   portfolioIntradayValueHistoryTable: ddb.portfolioIntradayValueHistoryTable,
   overviewIntradayValueHistoryTable: ddb.overviewIntradayValueHistoryTable,
-  stockResearchTable: ddb.stockResearchTable,
-  briefingsTable: ddb.briefingsTable,
   brokerConnectionsTable: ddb.brokerConnectionsTable,
   deviceTokensTable: ddb.deviceTokensTable,
   workerQueue: sqs.workerQueue,
-});
-
-new EodLambdaStack(app, 'EodLambdaStack', {
-  env,
-  internalApiUrl: ecs.apiUrl,
-});
-
-new IntradayLambdaStack(app, 'IntradayLambdaStack', {
-  env,
-  internalApiUrl: ecs.apiUrl,
-});
-
-new StockResearchLambdaStack(app, 'StockResearchLambdaStack', {
-  env,
-  internalApiUrl: ecs.apiUrl,
 });
 
 new WafStack(app, 'WafStack', {
