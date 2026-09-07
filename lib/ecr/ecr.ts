@@ -8,8 +8,8 @@ export class EcrStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    this.repository = new Repository(this, 'HoudiniRepository', {
-      repositoryName: 'houdini',
+    this.repository = new Repository(this, 'AtriusRepository', {
+      repositoryName: 'atrius',
       imageTagMutability: TagMutability.MUTABLE,
       imageScanOnPush: true,
       removalPolicy: RemovalPolicy.RETAIN,

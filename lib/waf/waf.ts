@@ -125,15 +125,15 @@ export class WafStack extends Stack {
       },
     ];
 
-    const webAcl = new CfnWebACL(this, 'HoudiniAlbAcl', {
-      name: 'houdini-alb-acl',
+    const webAcl = new CfnWebACL(this, 'AtriusAlbAcl', {
+      name: 'atrius-alb-acl',
       scope: 'REGIONAL',
       defaultAction: { allow: {} },
-      visibilityConfig: visibility('houdiniAlbAcl'),
+      visibilityConfig: visibility('atriusAlbAcl'),
       rules,
     });
 
-    new CfnWebACLAssociation(this, 'HoudiniAlbAclAssociation', {
+    new CfnWebACLAssociation(this, 'AtriusAlbAclAssociation', {
       resourceArn: props.loadBalancerArn,
       webAclArn: webAcl.attrArn,
     });

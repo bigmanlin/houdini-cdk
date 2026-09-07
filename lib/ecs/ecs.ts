@@ -12,7 +12,7 @@ import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patte
 import { ApplicationProtocol } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import { Repository } from 'aws-cdk-lib/aws-ecr';
 import { Role, ServicePrincipal, ManagedPolicy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
-import { HostedZone } from 'aws-cdk-lib/aws-route53';
+import { Certificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
@@ -20,18 +20,21 @@ import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 
-const ZONE_NAME = 'tradehoudini.com';
-const API_DOMAIN = `api.${ZONE_NAME}`;
+// The API's DNS lives at Cloudflare, not Route 53, so the certificate is issued
+// outside the stack and referenced by ARN; nothing here writes a DNS record.
+const API_DOMAIN = 'api.atrius.app';
+const API_CERTIFICATE_ARN =
+  'arn:aws:acm:us-west-2:339640512039:certificate/3541e017-9701-4367-b417-ca649191cbc3';
 
-const AUTH0_DOMAIN = 'houdini-prod.us.auth0.com';
-const AUTH0_AUDIENCE = 'https://api.tradehoudini.com';
+const AUTH0_DOMAIN = 'auth.atrius.app';
+const AUTH0_AUDIENCE = 'https://api.atrius.app';
 
 // Loopback is the only redirect Robinhood's shared public client whitelists, and
 // nothing serves it: the user copies the dead address back into /connect. Once a
 // client of our own is provisioned this becomes an address we actually host.
 const ROBINHOOD_REDIRECT_URI = 'http://localhost:8080/callback';
 
-const APNS_BUNDLE_ID = 'com.tradehoudini.houdini';
+const APNS_BUNDLE_ID = 'app.atrius';
 
 // Sandbox while the app is installed from Xcode; TestFlight and App Store
 // builds mint production tokens instead, and the two hosts reject each other's.
@@ -72,11 +75,11 @@ export class EcsStack extends Stack {
     super(scope, id, props);
 
     // ── Secrets ───────────────────────────────────────────────────────────────
-    const massiveSecret = Secret.fromSecretNameV2(this, 'MassiveSecret', 'houdini/massive');
-    const alpacaSecret = Secret.fromSecretNameV2(this, 'AlpacaSecret', 'houdini/alpaca');
-    const fmpSecret = Secret.fromSecretNameV2(this, 'FmpSecret', 'houdini/fmp');
-    const anthropicSecret = Secret.fromSecretNameV2(this, 'AnthropicSecret', 'houdini/anthropic');
-    const apnsSecret = Secret.fromSecretNameV2(this, 'ApnsSecret', 'houdini/apns');
+    const massiveSecret = Secret.fromSecretNameV2(this, 'MassiveSecret', 'atrius/massive');
+    const alpacaSecret = Secret.fromSecretNameV2(this, 'AlpacaSecret', 'atrius/alpaca');
+    const fmpSecret = Secret.fromSecretNameV2(this, 'FmpSecret', 'atrius/fmp');
+    const anthropicSecret = Secret.fromSecretNameV2(this, 'AnthropicSecret', 'atrius/anthropic');
+    const apnsSecret = Secret.fromSecretNameV2(this, 'ApnsSecret', 'atrius/apns');
 
     // ── IAM ───────────────────────────────────────────────────────────────────
     const taskRole = new Role(this, 'TaskRole', {
@@ -161,23 +164,18 @@ export class EcsStack extends Stack {
 
     // ── ECS + ALB ─────────────────────────────────────────────────────────────
     const vpc = Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
-    const cluster = new Cluster(this, 'HoudiniCluster', { vpc, clusterName: 'HoudiniCluster' });
+    const cluster = new Cluster(this, 'AtriusCluster', { vpc, clusterName: 'AtriusCluster' });
 
-    const logGroup = new LogGroup(this, 'HoudiniLogGroup', {
-      logGroupName: '/ecs/houdini',
+    const logGroup = new LogGroup(this, 'AtriusLogGroup', {
+      logGroupName: '/ecs/atrius',
       retention: RetentionDays.ONE_MONTH,
     });
 
-    // The zone is registrar-created, not stack-owned, so it is looked up rather
-    // than declared. The pattern issues and DNS-validates the certificate itself.
-    const hostedZone = HostedZone.fromLookup(this, 'HoudiniZone', { domainName: ZONE_NAME });
-
     const image = ContainerImage.fromEcrRepository(props.repository, 'latest');
 
-    const service = new ApplicationLoadBalancedFargateService(this, 'HoudiniService', {
+    const service = new ApplicationLoadBalancedFargateService(this, 'AtriusService', {
       cluster,
-      domainName: API_DOMAIN,
-      domainZone: hostedZone,
+      certificate: Certificate.fromCertificateArn(this, 'ApiCertificate', API_CERTIFICATE_ARN),
       protocol: ApplicationProtocol.HTTPS,
       redirectHTTP: true,
       memoryLimitMiB: 1024,
@@ -187,8 +185,8 @@ export class EcsStack extends Stack {
       maxHealthyPercent: 200,
       assignPublicIp: true,
       taskSubnets: { subnetType: SubnetType.PUBLIC },
-      loadBalancerName: 'HoudiniALB',
-      serviceName: 'HoudiniService',
+      loadBalancerName: 'AtriusALB',
+      serviceName: 'AtriusService',
       taskImageOptions: {
         image,
         containerPort: 3000,
@@ -227,7 +225,7 @@ export class EcsStack extends Stack {
     // so it sits behind no load balancer. It runs around the clock because an
     // owner deploys at any hour and the build must land before the next open.
     const workerTaskDefinition = new FargateTaskDefinition(this, 'WorkerTaskDef', {
-      family: 'houdini-worker',
+      family: 'atrius-worker',
       cpu: 1024,
       memoryLimitMiB: 2048,
       taskRole,
@@ -243,9 +241,9 @@ export class EcsStack extends Stack {
     });
 
     // One task, never two: a second worker would wake every agent twice.
-    new FargateService(this, 'HoudiniWorker', {
+    new FargateService(this, 'AtriusWorker', {
       cluster,
-      serviceName: 'HoudiniWorker',
+      serviceName: 'AtriusWorker',
       taskDefinition: workerTaskDefinition,
       desiredCount: 1,
       minHealthyPercent: 0,

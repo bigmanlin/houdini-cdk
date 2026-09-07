@@ -1,6 +1,6 @@
 # houdini-cdk
 
-The AWS infrastructure for Houdini: tables, buckets, queues, schedules, the ECS
+The AWS infrastructure for Atrius: tables, buckets, queues, schedules, the ECS
 service, and the Lambda triggers that poke it.
 
 **Docs hold constraints, never state.** No stack inventories, no table counts, no
