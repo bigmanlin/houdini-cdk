@@ -45,6 +45,7 @@ const ecs = new EcsStack(app, 'EcsStack', {
   identitiesTable: ddb.identitiesTable,
   portfoliosTable: ddb.portfoliosTable,
   positionsTable: ddb.positionsTable,
+  bookPositionsTable: ddb.bookPositionsTable,
   tradesTable: ddb.tradesTable,
   cronJobsTable: ddb.cronJobsTable,
   cronJobRunsTable: ddb.cronJobRunsTable,

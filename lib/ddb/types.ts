@@ -3,6 +3,7 @@ export enum TableName {
   Identities = 'identities',
   Portfolios = 'portfolios',
   Positions = 'positions',
+  BookPositions = 'bookPositions',
   Trades = 'trades',
   CronJobs = 'cronJobs',
   CronJobRuns = 'cronJobRuns',

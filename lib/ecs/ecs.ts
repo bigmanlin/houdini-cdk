@@ -48,6 +48,7 @@ interface EcsStackProps extends StackProps {
   identitiesTable: Table;
   portfoliosTable: Table;
   positionsTable: Table;
+  bookPositionsTable: Table;
   tradesTable: Table;
   cronJobsTable: Table;
   cronJobRunsTable: Table;
@@ -91,6 +92,7 @@ export class EcsStack extends Stack {
       props.identitiesTable,
       props.portfoliosTable,
       props.positionsTable,
+      props.bookPositionsTable,
       props.tradesTable,
       props.cronJobsTable,
       props.cronJobRunsTable,
