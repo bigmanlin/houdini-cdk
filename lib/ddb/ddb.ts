@@ -15,6 +15,7 @@ export class DdbStack extends Stack {
   public readonly identitiesTable: Table;
   public readonly portfoliosTable: Table;
   public readonly positionsTable: Table;
+  public readonly bookPositionsTable: Table;
   public readonly tradesTable: Table;
   public readonly cronJobsTable: Table;
   public readonly cronJobRunsTable: Table;
@@ -76,6 +77,18 @@ export class DdbStack extends Stack {
     this.positionsTable = new Table(this, 'PositionsTable', {
       tableName: TableName.Positions,
       partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
+      sortKey: { name: 'symbol', type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.RETAIN,
+      ...PITR,
+    });
+
+    // A position belongs to one agent's book, not to the account: several agents
+    // may hold the same symbol on one account, and each keeps its own quantity
+    // and cost. The account's own holdings are the venue's total less every book.
+    this.bookPositionsTable = new Table(this, 'BookPositionsTable', {
+      tableName: TableName.BookPositions,
+      partitionKey: { name: 'agentId', type: AttributeType.STRING },
       sortKey: { name: 'symbol', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,

@@ -8,8 +8,8 @@ describe('DdbStack', () => {
   const stack = new DdbStack(app, 'TestDdbStack');
   const template = Template.fromStack(stack);
 
-  test('creates 17 tables', () => {
-    template.resourceCountIs('AWS::DynamoDB::Table', 17);
+  test('creates 18 tables', () => {
+    template.resourceCountIs('AWS::DynamoDB::Table', 18);
   });
 
   test('agents table is keyed by agent with a portfolio index and a TTL', () => {
