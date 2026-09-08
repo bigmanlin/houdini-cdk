@@ -8,8 +8,41 @@ describe('DdbStack', () => {
   const stack = new DdbStack(app, 'TestDdbStack');
   const template = Template.fromStack(stack);
 
-  test('creates 15 tables', () => {
-    template.resourceCountIs('AWS::DynamoDB::Table', 15);
+  test('creates 13 tables', () => {
+    template.resourceCountIs('AWS::DynamoDB::Table', 13);
+  });
+
+  test('agents table is keyed by agent with a portfolio index and a TTL', () => {
+    template.hasResourceProperties('AWS::DynamoDB::Table', {
+      TableName: TableName.Agents,
+      KeySchema: [{ AttributeName: 'agentId', KeyType: 'HASH' }],
+      GlobalSecondaryIndexes: [
+        {
+          IndexName: GsiName.AgentsByPortfolio,
+          KeySchema: [{ AttributeName: 'portfolioId', KeyType: 'HASH' }],
+        },
+      ],
+      TimeToLiveSpecification: { AttributeName: 'ttl', Enabled: true },
+    });
+  });
+
+  test('activity table is keyed by agent and instant, with a portfolio index in time order', () => {
+    template.hasResourceProperties('AWS::DynamoDB::Table', {
+      TableName: TableName.Activity,
+      KeySchema: [
+        { AttributeName: 'agentId', KeyType: 'HASH' },
+        { AttributeName: 'at', KeyType: 'RANGE' },
+      ],
+      GlobalSecondaryIndexes: [
+        {
+          IndexName: GsiName.ActivityByPortfolio,
+          KeySchema: [
+            { AttributeName: 'portfolioId', KeyType: 'HASH' },
+            { AttributeName: 'at', KeyType: 'RANGE' },
+          ],
+        },
+      ],
+    });
   });
 
   test('all tables use PAY_PER_REQUEST billing', () => {
@@ -60,71 +93,13 @@ describe('DdbStack', () => {
     });
   });
 
-  test('trades table has cronJobId and portfolioId+timestamp GSIs', () => {
+  test('bookPositions table is keyed by agent and symbol', () => {
     template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: TableName.Trades,
-      GlobalSecondaryIndexes: [
-        {
-          IndexName: GsiName.TradesByCronJob,
-          KeySchema: [{ AttributeName: 'cronJobId', KeyType: 'HASH' }],
-        },
-        {
-          IndexName: GsiName.TradesByPortfolioTime,
-          KeySchema: [
-            { AttributeName: 'portfolioId', KeyType: 'HASH' },
-            { AttributeName: 'timestamp', KeyType: 'RANGE' },
-          ],
-        },
+      TableName: TableName.BookPositions,
+      KeySchema: [
+        { AttributeName: 'agentId', KeyType: 'HASH' },
+        { AttributeName: 'symbol', KeyType: 'RANGE' },
       ],
-    });
-  });
-
-  test('cronJobs table has userId and portfolioId GSIs', () => {
-    template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: TableName.CronJobs,
-      GlobalSecondaryIndexes: [
-        {
-          IndexName: GsiName.CronJobsByUser,
-          KeySchema: [{ AttributeName: 'userId', KeyType: 'HASH' }],
-        },
-        {
-          IndexName: GsiName.CronJobsByPortfolio,
-          KeySchema: [{ AttributeName: 'portfolioId', KeyType: 'HASH' }],
-        },
-      ],
-    });
-  });
-
-  test('cronJobRuns table has portfolioId and cronJobId+executedAt GSIs', () => {
-    template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: TableName.CronJobRuns,
-      GlobalSecondaryIndexes: [
-        {
-          IndexName: GsiName.CronJobRunsByPortfolio,
-          KeySchema: [{ AttributeName: 'portfolioId', KeyType: 'HASH' }],
-        },
-        {
-          IndexName: GsiName.CronJobRunsByTime,
-          KeySchema: [
-            { AttributeName: 'cronJobId', KeyType: 'HASH' },
-            { AttributeName: 'executedAt', KeyType: 'RANGE' },
-          ],
-        },
-        {
-          IndexName: GsiName.RunsByPortfolioTime,
-          KeySchema: [
-            { AttributeName: 'portfolioId', KeyType: 'HASH' },
-            { AttributeName: 'executedAt', KeyType: 'RANGE' },
-          ],
-        },
-      ],
-    });
-  });
-
-  test('briefing table is keyed on portfolioId alone', () => {
-    template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: TableName.Briefing,
-      KeySchema: [{ AttributeName: 'portfolioId', KeyType: 'HASH' }],
     });
   });
 

@@ -15,15 +15,13 @@ export class DdbStack extends Stack {
   public readonly identitiesTable: Table;
   public readonly portfoliosTable: Table;
   public readonly positionsTable: Table;
-  public readonly tradesTable: Table;
-  public readonly cronJobsTable: Table;
-  public readonly cronJobRunsTable: Table;
+  public readonly bookPositionsTable: Table;
+  public readonly agentsTable: Table;
+  public readonly activityTable: Table;
   public readonly portfolioEodValueHistoryTable: Table;
   public readonly overviewEodValueHistoryTable: Table;
   public readonly portfolioIntradayValueHistoryTable: Table;
   public readonly overviewIntradayValueHistoryTable: Table;
-  public readonly stockResearchTable: Table;
-  public readonly briefingsTable: Table;
   public readonly brokerConnectionsTable: Table;
   public readonly deviceTokensTable: Table;
 
@@ -80,81 +78,52 @@ export class DdbStack extends Stack {
       ...PITR,
     });
 
-    this.tradesTable = new Table(this, 'TradesTable', {
-      tableName: TableName.Trades,
-      partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
-      sortKey: { name: 'tradeId', type: AttributeType.STRING },
+    // A position belongs to one agent's book, not to the account: several agents
+    // may hold the same symbol on one account, and each keeps its own quantity
+    // and cost. The account's own holdings are the venue's total less every book.
+    this.bookPositionsTable = new Table(this, 'BookPositionsTable', {
+      tableName: TableName.BookPositions,
+      partitionKey: { name: 'agentId', type: AttributeType.STRING },
+      sortKey: { name: 'symbol', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
       ...PITR,
     });
 
-    this.tradesTable.addGlobalSecondaryIndex({
-      indexName: GsiName.TradesByCronJob,
-      partitionKey: { name: 'cronJobId', type: AttributeType.STRING },
-      projectionType: ProjectionType.ALL,
-    });
-
-    // Time-ordered reads (recent list, "since" windows for live P&L / cron
-    // trade-activity) — the base range key (tradeId) is a random UUID.
-    this.tradesTable.addGlobalSecondaryIndex({
-      indexName: GsiName.TradesByPortfolioTime,
-      partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
-      sortKey: { name: 'timestamp', type: AttributeType.STRING },
-      projectionType: ProjectionType.ALL,
-    });
-
-    this.cronJobsTable = new Table(this, 'CronJobsTable', {
-      tableName: TableName.CronJobs,
-      partitionKey: { name: 'cronJobId', type: AttributeType.STRING },
+    // A strategy deployed on an account: its schedule, status, and last wake.
+    // One live agent per account; archived ones stay as the record behind
+    // their activity, found through the account they traded.
+    this.agentsTable = new Table(this, 'AgentsTable', {
+      tableName: TableName.Agents,
+      partitionKey: { name: 'agentId', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
       timeToLiveAttribute: 'ttl',
       ...PITR,
     });
 
-    this.cronJobsTable.addGlobalSecondaryIndex({
-      indexName: GsiName.CronJobsByUser,
-      partitionKey: { name: 'userId', type: AttributeType.STRING },
-      projectionType: ProjectionType.ALL,
-    });
-
-    this.cronJobsTable.addGlobalSecondaryIndex({
-      indexName: GsiName.CronJobsByPortfolio,
+    this.agentsTable.addGlobalSecondaryIndex({
+      indexName: GsiName.AgentsByPortfolio,
       partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
       projectionType: ProjectionType.ALL,
     });
 
-    this.cronJobRunsTable = new Table(this, 'CronJobRunsTable', {
-      tableName: TableName.CronJobRuns,
-      partitionKey: { name: 'cronJobId', type: AttributeType.STRING },
-      sortKey: { name: 'runId', type: AttributeType.STRING },
+    // What an agent did, one row per event: a review, an entry, an exit, a
+    // refusal, a rebuild. A wake that found nothing writes no row. The feed
+    // reads an agent's rows newest first; the portfolio page reads across agents.
+    this.activityTable = new Table(this, 'ActivityTable', {
+      tableName: TableName.Activity,
+      partitionKey: { name: 'agentId', type: AttributeType.STRING },
+      sortKey: { name: 'at', type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
       ...PITR,
     });
 
-    this.cronJobRunsTable.addGlobalSecondaryIndex({
-      indexName: GsiName.CronJobRunsByPortfolio,
+    this.activityTable.addGlobalSecondaryIndex({
+      indexName: GsiName.ActivityByPortfolio,
       partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
-      projectionType: ProjectionType.ALL,
-    });
-
-    // Time-ordered recency (most-recent runs) — the base range key (runId) is a
-    // random UUID/SQS MessageId, so it can't be ordered by time.
-    this.cronJobRunsTable.addGlobalSecondaryIndex({
-      indexName: GsiName.CronJobRunsByTime,
-      partitionKey: { name: 'cronJobId', type: AttributeType.STRING },
-      sortKey: { name: 'executedAt', type: AttributeType.STRING },
-      projectionType: ProjectionType.ALL,
-    });
-
-    // Portfolio-centric time windows ("today's runs", "last N runs") — used by
-    // the briefing generator and upcoming overview/memory reads.
-    this.cronJobRunsTable.addGlobalSecondaryIndex({
-      indexName: GsiName.RunsByPortfolioTime,
-      partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
-      sortKey: { name: 'executedAt', type: AttributeType.STRING },
+      sortKey: { name: 'at', type: AttributeType.STRING },
       projectionType: ProjectionType.ALL,
     });
 
@@ -201,26 +170,6 @@ export class DdbStack extends Stack {
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
       timeToLiveAttribute: 'ttl',
-    });
-
-    // Tier 2 market research, one row per symbol, refreshed daily by the
-    // pre-market ingestion job; rows carry a `ttl` attribute (~48h).
-    this.stockResearchTable = new Table(this, 'StockResearchTable', {
-      tableName: TableName.StockResearch,
-      partitionKey: { name: 'symbol', type: AttributeType.STRING },
-      billingMode: BillingMode.PAY_PER_REQUEST,
-      removalPolicy: RemovalPolicy.RETAIN,
-      timeToLiveAttribute: 'ttl',
-    });
-
-    // "Today's recap" — one living row per portfolio, overwritten on every
-    // rebuild.
-    this.briefingsTable = new Table(this, 'BriefingsTable', {
-      tableName: TableName.Briefing,
-      partitionKey: { name: 'portfolioId', type: AttributeType.STRING },
-      billingMode: BillingMode.PAY_PER_REQUEST,
-      removalPolicy: RemovalPolicy.RETAIN,
-      ...PITR,
     });
 
     // Brokerage OAuth: live connections and the short-lived attempts that create

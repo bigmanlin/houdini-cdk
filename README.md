@@ -1,6 +1,6 @@
 # houdini-cdk
 
-AWS CDK infrastructure for Houdini — an AI-driven stock trading simulation platform.
+AWS CDK infrastructure for Atrius — agents that trade a strategy on paper or at a brokerage.
 
 ## Stacks
 

@@ -1,5 +1,6 @@
 import { App } from 'aws-cdk-lib';
 import { DdbStack } from './ddb/ddb';
+import { RdsStack } from './rds/rds';
 import { S3Stack } from './s3/s3';
 import { SqsStack } from './sqs/sqs';
 import { EventBridgeStack } from './eventbridge/eventbridge';
@@ -28,8 +29,11 @@ const ddb = new DdbStack(app, 'DdbStack', { env });
 const s3 = new S3Stack(app, 'S3Stack', { env });
 const sqs = new SqsStack(app, 'SqsStack', { env });
 const ecr = new EcrStack(app, 'EcrStack', { env });
+const rds = new RdsStack(app, 'RdsStack', { env });
 
-const eventbridge = new EventBridgeStack(app, 'EventBridgeStack', {
+// The queue and scheduler stacks stay constructed, unreferenced, for one deploy:
+// the ECS stack must drop its imports of them before they can be destroyed.
+new EventBridgeStack(app, 'EventBridgeStack', {
   env,
   cronJobQueue: sqs.cronJobQueue,
 });
@@ -37,25 +41,25 @@ const eventbridge = new EventBridgeStack(app, 'EventBridgeStack', {
 const ecs = new EcsStack(app, 'EcsStack', {
   env,
   repository: ecr.repository,
-  cronJobQueue: sqs.cronJobQueue,
-  schedulerRoleArn: eventbridge.schedulerRole.roleArn,
+  database: rds.instance,
+  databaseCredentials: rds.credentials,
+  databaseSecurityGroup: rds.securityGroup,
   strategiesBucket: s3.strategiesBucket,
   uploadsBucket: s3.uploadsBucket,
   usersTable: ddb.usersTable,
   identitiesTable: ddb.identitiesTable,
   portfoliosTable: ddb.portfoliosTable,
   positionsTable: ddb.positionsTable,
-  tradesTable: ddb.tradesTable,
-  cronJobsTable: ddb.cronJobsTable,
-  cronJobRunsTable: ddb.cronJobRunsTable,
+  bookPositionsTable: ddb.bookPositionsTable,
+  agentsTable: ddb.agentsTable,
+  activityTable: ddb.activityTable,
   portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
   overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
   portfolioIntradayValueHistoryTable: ddb.portfolioIntradayValueHistoryTable,
   overviewIntradayValueHistoryTable: ddb.overviewIntradayValueHistoryTable,
-  stockResearchTable: ddb.stockResearchTable,
-  briefingsTable: ddb.briefingsTable,
   brokerConnectionsTable: ddb.brokerConnectionsTable,
   deviceTokensTable: ddb.deviceTokensTable,
+  workerQueue: sqs.workerQueue,
 });
 
 new EodLambdaStack(app, 'EodLambdaStack', {

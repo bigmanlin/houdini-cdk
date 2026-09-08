@@ -11,9 +11,9 @@ describe('EcrStack', () => {
     template.resourceCountIs('AWS::ECR::Repository', 1);
   });
 
-  test('repository is named houdini', () => {
+  test('repository is named atrius', () => {
     template.hasResourceProperties('AWS::ECR::Repository', {
-      RepositoryName: 'houdini',
+      RepositoryName: 'atrius',
     });
   });
 
