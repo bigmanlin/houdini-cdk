@@ -99,6 +99,7 @@ export class EcsStack extends Stack {
     const alpacaSecret = Secret.fromSecretNameV2(this, 'AlpacaSecret', 'atrius/alpaca');
     const fmpSecret = Secret.fromSecretNameV2(this, 'FmpSecret', 'atrius/fmp');
     const anthropicSecret = Secret.fromSecretNameV2(this, 'AnthropicSecret', 'atrius/anthropic');
+    const metaSecret = Secret.fromSecretNameV2(this, 'MetaSecret', 'atrius/meta');
     const apnsSecret = Secret.fromSecretNameV2(this, 'ApnsSecret', 'atrius/apns');
 
     // ── IAM ───────────────────────────────────────────────────────────────────
@@ -149,6 +150,7 @@ export class EcsStack extends Stack {
     alpacaSecret.grantRead(executionRole);
     fmpSecret.grantRead(executionRole);
     anthropicSecret.grantRead(executionRole);
+    metaSecret.grantRead(executionRole);
 
     // Container env + secrets shared by the API and the worker. They must match:
     // config.ts validates the full set at import, and both entry points load it.
@@ -176,6 +178,7 @@ export class EcsStack extends Stack {
       ALPACA_API_SECRET: EcsSecret.fromSecretsManager(alpacaSecret, 'apiSecret'),
       FMP_API_KEY: EcsSecret.fromSecretsManager(fmpSecret, 'apiKey'),
       ANTHROPIC_API_KEY: EcsSecret.fromSecretsManager(anthropicSecret, 'apiKey'),
+      META_MODEL_API_KEY: EcsSecret.fromSecretsManager(metaSecret, 'apiKey'),
       APNS_KEY: EcsSecret.fromSecretsManager(apnsSecret, 'key'),
       APNS_KEY_ID: EcsSecret.fromSecretsManager(apnsSecret, 'keyId'),
       APNS_TEAM_ID: EcsSecret.fromSecretsManager(apnsSecret, 'teamId'),

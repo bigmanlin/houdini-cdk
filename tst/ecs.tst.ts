@@ -86,7 +86,10 @@ describe('EcsStack', () => {
         Match.objectLike({
           Command: ['node', 'dist/worker.js'],
           Environment: Match.arrayWith([Match.objectLike({ Name: 'STRATEGIES_BUCKET' })]),
-          Secrets: Match.arrayWith([Match.objectLike({ Name: 'ANTHROPIC_API_KEY' })]),
+          Secrets: Match.arrayWith([
+            Match.objectLike({ Name: 'ANTHROPIC_API_KEY' }),
+            Match.objectLike({ Name: 'META_MODEL_API_KEY' }),
+          ]),
         }),
       ]),
     });
@@ -120,6 +123,7 @@ describe('EcsStack', () => {
             Match.objectLike({ Name: 'ALPACA_API_SECRET' }),
             Match.objectLike({ Name: 'FMP_API_KEY' }),
             Match.objectLike({ Name: 'ANTHROPIC_API_KEY' }),
+            Match.objectLike({ Name: 'META_MODEL_API_KEY' }),
           ]),
         }),
       ]),
