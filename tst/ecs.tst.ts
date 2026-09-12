@@ -89,6 +89,7 @@ describe('EcsStack', () => {
           Secrets: Match.arrayWith([
             Match.objectLike({ Name: 'ANTHROPIC_API_KEY' }),
             Match.objectLike({ Name: 'META_MODEL_API_KEY' }),
+            Match.objectLike({ Name: 'UNUSUAL_WHALES_API_KEY' }),
           ]),
         }),
       ]),
@@ -124,6 +125,7 @@ describe('EcsStack', () => {
             Match.objectLike({ Name: 'FMP_API_KEY' }),
             Match.objectLike({ Name: 'ANTHROPIC_API_KEY' }),
             Match.objectLike({ Name: 'META_MODEL_API_KEY' }),
+            Match.objectLike({ Name: 'UNUSUAL_WHALES_API_KEY' }),
           ]),
         }),
       ]),
