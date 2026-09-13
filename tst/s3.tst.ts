@@ -17,6 +17,21 @@ describe('S3Stack', () => {
     });
   });
 
+  test('strategies bucket expires the reads store after ninety days', () => {
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      LifecycleConfiguration: {
+        Rules: [
+          {
+            Prefix: 'reads/',
+            Status: 'Enabled',
+            ExpirationInDays: 90,
+            NoncurrentVersionExpiration: { NoncurrentDays: 1 },
+          },
+        ],
+      },
+    });
+  });
+
   test('uploads bucket expires temp objects via a lifecycle rule', () => {
     template.hasResourceProperties('AWS::S3::Bucket', {
       LifecycleConfiguration: {
