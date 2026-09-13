@@ -9,6 +9,11 @@ export class S3Stack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
+    // The reads store under `reads/` holds the tables a run read, once per
+    // distinct table by fingerprint; the run row that names them is in
+    // Postgres and outlives them. Ninety days covers every replay anyone asks
+    // for. Versioned buckets expire the current version and keep it as a
+    // noncurrent one, so the rule expires those too.
     this.strategiesBucket = new Bucket(this, 'StrategiesBucket', {
       bucketName: `houdini-strategies-${this.account}-${this.region}`,
       versioned: true,
@@ -16,6 +21,13 @@ export class S3Stack extends Stack {
       enforceSSL: true,
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
       removalPolicy: RemovalPolicy.RETAIN,
+      lifecycleRules: [
+        {
+          prefix: 'reads/',
+          expiration: Duration.days(90),
+          noncurrentVersionExpiration: Duration.days(1),
+        },
+      ],
     });
 
     // Temp bucket for chat attachments. Objects under `tmp/` are ephemeral, so a
