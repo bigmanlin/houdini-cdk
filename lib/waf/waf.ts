@@ -68,13 +68,22 @@ export class WafStack extends Stack {
       {
         name: 'rate-launch',
         priority: 1,
-        action: COUNT,
+        action: BLOCK,
         statement: {
           rateBasedStatement: {
             limit: 20,
             aggregateKeyType: 'IP',
             evaluationWindowSec: 60,
-            scopeDownStatement: uriPathMatch('ENDS_WITH', '/launch'),
+            // Both ways to create an agent: the account route and the agent
+            // route under an existing account. Only the first was covered.
+            scopeDownStatement: {
+              orStatement: {
+                statements: [
+                  uriPathMatch('ENDS_WITH', '/launch'),
+                  uriPathMatch('ENDS_WITH', '/agent'),
+                ],
+              },
+            },
           },
         },
         visibilityConfig: visibility('rateLaunch'),
@@ -86,21 +95,13 @@ export class WafStack extends Stack {
       {
         name: 'rate-billed-routes',
         priority: 2,
-        action: COUNT,
+        action: BLOCK,
         statement: {
           rateBasedStatement: {
             limit: 100,
             aggregateKeyType: 'IP',
             evaluationWindowSec: 60,
-            scopeDownStatement: {
-              orStatement: {
-                statements: [
-                  uriPathMatch('ENDS_WITH', '/agents/chat'),
-                  uriPathMatch('ENDS_WITH', '/buy'),
-                  uriPathMatch('ENDS_WITH', '/sell'),
-                ],
-              },
-            },
+            scopeDownStatement: uriPathMatch('ENDS_WITH', '/agents/chat'),
           },
         },
         visibilityConfig: visibility('rateBilledRoutes'),

@@ -1,10 +1,5 @@
 import { Stack, StackProps, Duration } from 'aws-cdk-lib';
-import {
-  Vpc,
-  SubnetType,
-  SecurityGroup,
-  CfnSecurityGroupIngress,
-} from 'aws-cdk-lib/aws-ec2';
+import { Vpc, SubnetType, SecurityGroup, CfnSecurityGroupIngress } from 'aws-cdk-lib/aws-ec2';
 import {
   Cluster,
   ContainerImage,
@@ -14,31 +9,25 @@ import {
   LogDrivers,
 } from 'aws-cdk-lib/aws-ecs';
 import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
-import {
-  ApplicationProtocol,
-  HttpCodeTarget,
-} from 'aws-cdk-lib/aws-elasticloadbalancingv2';
-import {
-  Alarm,
-  ComparisonOperator,
-  TreatMissingData,
-} from 'aws-cdk-lib/aws-cloudwatch';
+import { ApplicationProtocol, HttpCodeTarget } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import { Alarm, ComparisonOperator, TreatMissingData } from 'aws-cdk-lib/aws-cloudwatch';
 import { SnsAction } from 'aws-cdk-lib/aws-cloudwatch-actions';
 import { Topic } from 'aws-cdk-lib/aws-sns';
 import { Repository } from 'aws-cdk-lib/aws-ecr';
-import { Role, ServicePrincipal, ManagedPolicy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+import {
+  Role,
+  ServicePrincipal,
+  ManagedPolicy,
+  PolicyStatement,
+  Effect,
+} from 'aws-cdk-lib/aws-iam';
 import { Certificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { DatabaseInstance } from 'aws-cdk-lib/aws-rds';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
-import {
-  FilterPattern,
-  LogGroup,
-  MetricFilter,
-  RetentionDays,
-} from 'aws-cdk-lib/aws-logs';
+import { FilterPattern, LogGroup, MetricFilter, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 
 // The API's DNS lives at Cloudflare, not Route 53, so the certificate is issued
@@ -251,8 +240,7 @@ export class EcsStack extends Stack {
     // inherits the permission instead of needing a new rule.
     new CfnSecurityGroupIngress(this, 'ApiToDatabase', {
       groupId: props.databaseSecurityGroup.securityGroupId,
-      sourceSecurityGroupId:
-        service.service.connections.securityGroups[0].securityGroupId,
+      sourceSecurityGroupId: service.service.connections.securityGroups[0].securityGroupId,
       ipProtocol: 'tcp',
       fromPort: 5432,
       toPort: 5432,
@@ -339,12 +327,17 @@ export class EcsStack extends Stack {
       new Alarm(this, 'ApiErrors', {
         alarmName: 'atrius-api-5xx',
         alarmDescription: 'The API answered a request with a server error.',
-        metric: service.targetGroup.metrics.httpCodeTarget(
-          HttpCodeTarget.TARGET_5XX_COUNT,
-          { period: Duration.minutes(5), statistic: 'Sum' },
-        ),
-        threshold: 1,
-        evaluationPeriods: 1,
+        metric: service.targetGroup.metrics.httpCodeTarget(HttpCodeTarget.TARGET_5XX_COUNT, {
+          period: Duration.minutes(5),
+          statistic: 'Sum',
+        }),
+        // A rolling deploy drains tasks with a five minute deregistration
+        // delay, and a connection handed to a draining task answers 5xx. One
+        // of those is normal; an alarm on one made every deploy a page, and an
+        // inbox that pages on every deploy is one nobody reads.
+        threshold: 5,
+        evaluationPeriods: 3,
+        datapointsToAlarm: 2,
         comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
         treatMissingData: TreatMissingData.NOT_BREACHING,
       }),
@@ -360,6 +353,65 @@ export class EcsStack extends Stack {
         }),
         threshold: 1,
         evaluationPeriods: 2,
+        comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+      }),
+    );
+
+    // The worker owns time: if its minute tick stops, no agent trades again and
+    // nothing else says so. ECS replaces the task only when the process exits,
+    // so a wedged event loop stays RUNNING and healthy forever. The tick logs
+    // one line a minute whether or not anything is due, which is the only thing
+    // absence can be measured against.
+    const workerTicks = new MetricFilter(this, 'WorkerTicks', {
+      logGroup,
+      metricNamespace: 'Atrius',
+      metricName: 'WorkerTicks',
+      filterPattern: FilterPattern.stringValue('$.message', '=', 'Worker tick'),
+      metricValue: '1',
+    });
+
+    notify(
+      new Alarm(this, 'WorkerStopped', {
+        alarmName: 'atrius-worker-stopped',
+        alarmDescription: 'The worker clock has stopped. No agent is trading.',
+        metric: workerTicks.metric({
+          period: Duration.minutes(5),
+          statistic: 'Sum',
+        }),
+        // Three of five, because a deploy stops the single worker task before
+        // starting its replacement and the gap runs to about ninety seconds.
+        threshold: 3,
+        evaluationPeriods: 1,
+        comparisonOperator: ComparisonOperator.LESS_THAN_THRESHOLD,
+        // No data is the failure, not the absence of one: a worker that has
+        // stopped logging is exactly what this alarm is for.
+        treatMissingData: TreatMissingData.BREACHING,
+      }),
+    );
+
+    // The tick holds a flag while it runs and clears it in a finally, so one
+    // blocked call means every later minute is skipped. Distinct from a dead
+    // worker, and fixed differently.
+    const overruns = new MetricFilter(this, 'TickOverruns', {
+      logGroup,
+      metricNamespace: 'Atrius',
+      metricName: 'TickOverruns',
+      filterPattern: FilterPattern.stringValue('$.message', '=', 'Tick overran, skipped'),
+      metricValue: '1',
+    });
+
+    notify(
+      new Alarm(this, 'TickWedged', {
+        alarmName: 'atrius-tick-wedged',
+        alarmDescription: 'The worker tick is not finishing within its minute.',
+        metric: overruns.metric({
+          period: Duration.minutes(5),
+          statistic: 'Sum',
+        }),
+        // One overrun is a slow minute. Three is a flag that will not clear.
+        threshold: 3,
+        evaluationPeriods: 1,
         comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
         treatMissingData: TreatMissingData.NOT_BREACHING,
       }),
