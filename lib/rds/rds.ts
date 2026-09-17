@@ -20,6 +20,9 @@ import {
   PostgresEngineVersion,
   StorageType,
 } from 'aws-cdk-lib/aws-rds';
+import { Alarm, ComparisonOperator, Metric, TreatMissingData } from 'aws-cdk-lib/aws-cloudwatch';
+import { SnsAction } from 'aws-cdk-lib/aws-cloudwatch-actions';
+import { Topic } from 'aws-cdk-lib/aws-sns';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from 'constructs';
 
@@ -135,9 +138,7 @@ export class RdsStack extends Stack {
       securityGroup: group,
       role: new Role(this, 'AtriusBastionRole', {
         assumedBy: new ServicePrincipal('ec2.amazonaws.com'),
-        managedPolicies: [
-          ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'),
-        ],
+        managedPolicies: [ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore')],
       }),
     });
 
@@ -145,6 +146,78 @@ export class RdsStack extends Stack {
       group,
       Port.tcp(5432),
       'Database access through Session Manager',
+    );
+
+    // One small burstable instance with no failover, and nothing watching it.
+    // Each alarm below fires on a change from where the instance has actually
+    // been sitting, not on a round number: a threshold the instance already
+    // lives near is an alarm nobody reads.
+    //
+    // The topic is the API stack's, so these publish to the same address by
+    // name rather than by reference, which would close a cycle between the two
+    // stacks the way the ingress rule above would.
+    const alarms = Topic.fromTopicArn(
+      this,
+      'AtriusAlarms',
+      `arn:aws:sns:${this.region}:${this.account}:atrius-alarms`,
+    );
+    const watch = (
+      id: string,
+      alarmName: string,
+      alarmDescription: string,
+      metric: Metric,
+      threshold: number,
+      comparisonOperator: ComparisonOperator,
+    ) =>
+      new Alarm(this, id, {
+        alarmName,
+        alarmDescription,
+        metric,
+        threshold,
+        evaluationPeriods: 3,
+        datapointsToAlarm: 3,
+        comparisonOperator,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+      }).addAlarmAction(new SnsAction(alarms));
+
+    // Observed floor is about 136 MB of 1 GB, flat, and most of that is
+    // shared_buffers reserved at boot rather than anything the data is using.
+    // Below 100 MB means something changed.
+    watch(
+      'DatabaseMemory',
+      'atrius-db-memory',
+      'The database is close to out of memory.',
+      this.instance.metricFreeableMemory({ period: Duration.minutes(5) }),
+      100 * 1024 * 1024,
+      ComparisonOperator.LESS_THAN_THRESHOLD,
+    );
+
+    // max_connections is 79. Observed is about 11, and four API tasks plus the
+    // worker is about 55, so 65 is a leak or a surge rather than a busy day.
+    watch(
+      'DatabaseConnections',
+      'atrius-db-connections',
+      'The database is running out of connections.',
+      this.instance.metricDatabaseConnections({ period: Duration.minutes(5) }),
+      65,
+      ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+    );
+
+    // Burstable: the balance sits pinned at its cap of 288. Falling to 50 is
+    // sustained burn, and at zero every query slows at once.
+    watch(
+      'DatabaseCredits',
+      'atrius-db-cpu-credits',
+      'The database is burning CPU credits and will throttle.',
+      new Metric({
+        namespace: 'AWS/RDS',
+        metricName: 'CPUCreditBalance',
+        dimensionsMap: { DBInstanceIdentifier: 'atrius-postgres' },
+        period: Duration.minutes(5),
+        statistic: 'Minimum',
+      }),
+      50,
+      ComparisonOperator.LESS_THAN_THRESHOLD,
     );
 
     new CfnOutput(this, 'BastionInstanceId', {
