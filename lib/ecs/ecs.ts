@@ -44,11 +44,10 @@ const AUTH0_AUDIENCE = 'https://api.atrius.app';
 // client of our own is provisioned this becomes an address we actually host.
 const ROBINHOOD_REDIRECT_URI = 'http://localhost:8080/callback';
 
-const APNS_BUNDLE_ID = 'app.atrius';
-
-// Sandbox while the app is installed from Xcode; TestFlight and App Store
-// builds mint production tokens instead, and the two hosts reject each other's.
-const APNS_ENV = 'sandbox';
+// The app's own bundle id, which Apple checks every push against: a token is
+// issued for one app, and a topic naming any other earns DeviceTokenNotForTopic
+// and no delivery.
+const APNS_BUNDLE_ID = 'app.atrius.ios';
 
 interface EcsStackProps extends StackProps {
   repository: Repository;
@@ -158,10 +157,6 @@ export class EcsStack extends Stack {
       AUTH0_AUDIENCE,
       ROBINHOOD_REDIRECT_URI,
       APNS_BUNDLE_ID,
-      // Tokens minted by an Xcode build only answer to Apple's sandbox host;
-      // TestFlight and App Store builds mint production ones. Same key signs
-      // for both, so the switch is this line and a redeploy.
-      APNS_ENV,
       DATABASE_HOST: props.database.dbInstanceEndpointAddress,
       DATABASE_PORT: props.database.dbInstanceEndpointPort,
       DATABASE_NAME: 'atrius',
