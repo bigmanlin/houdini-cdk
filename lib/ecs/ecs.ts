@@ -94,6 +94,7 @@ export class EcsStack extends Stack {
       'atrius/unusualwhales',
     );
     const apnsSecret = Secret.fromSecretNameV2(this, 'ApnsSecret', 'atrius/apns');
+    const xaiSecret = Secret.fromSecretNameV2(this, 'XaiSecret', 'atrius/xai');
 
     // ── IAM ───────────────────────────────────────────────────────────────────
     const taskRole = new Role(this, 'TaskRole', {
@@ -128,6 +129,15 @@ export class EcsStack extends Stack {
         effect: Effect.ALLOW,
         actions: ['s3:PutObject', 's3:GetObject'],
         resources: [props.uploadsBucket.arnForObjects('tmp/*')],
+      }),
+    );
+    // The voice console: the persona it reads and the takes it keeps. A separate
+    // prefix because neither is temporary, and `tmp/` is emptied after two days.
+    taskRole.addToPolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ['s3:PutObject', 's3:GetObject'],
+        resources: [props.uploadsBucket.arnForObjects('voice/*')],
       }),
     );
 
@@ -170,6 +180,11 @@ export class EcsStack extends Stack {
       ANTHROPIC_API_KEY: EcsSecret.fromSecretsManager(anthropicSecret, 'apiKey'),
       META_MODEL_API_KEY: EcsSecret.fromSecretsManager(metaSecret, 'apiKey'),
       UNUSUAL_WHALES_API_KEY: EcsSecret.fromSecretsManager(unusualWhalesSecret, 'apiKey'),
+      // Absent, the voice console is simply off, so this fails closed rather
+      // than failing a boot. The token gates it: a browser cannot set a header
+      // on a WebSocket, so it carries this in the query instead of a bearer.
+      XAI_API_KEY: EcsSecret.fromSecretsManager(xaiSecret, 'apiKey'),
+      VOICE_CONSOLE_TOKEN: EcsSecret.fromSecretsManager(xaiSecret, 'consoleToken'),
       APNS_KEY: EcsSecret.fromSecretsManager(apnsSecret, 'key'),
       APNS_KEY_ID: EcsSecret.fromSecretsManager(apnsSecret, 'keyId'),
       APNS_TEAM_ID: EcsSecret.fromSecretsManager(apnsSecret, 'teamId'),
