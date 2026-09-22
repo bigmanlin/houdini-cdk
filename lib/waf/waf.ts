@@ -44,6 +44,25 @@ const visibility = (metricName: string): CfnWebACL.VisibilityConfigProperty => (
 const COUNT: CfnWebACL.RuleActionProperty = { count: {} };
 const BLOCK: CfnWebACL.RuleActionProperty = { block: {} };
 
+// One of AWS's own rule groups. `enforce` false counts every match instead of
+// acting on it, the managed-group form of the COUNT rollout above.
+function managed(
+  name: string,
+  priority: number,
+  group: string,
+  enforce: boolean,
+): CfnWebACL.RuleProperty {
+  return {
+    name,
+    priority,
+    overrideAction: enforce ? { none: {} } : { count: {} },
+    statement: {
+      managedRuleGroupStatement: { vendorName: 'AWS', name: group },
+    },
+    visibilityConfig: visibility(name),
+  };
+}
+
 export class WafStack extends Stack {
   constructor(scope: Construct, id: string, props: WafStackProps) {
     super(scope, id, props);
@@ -124,6 +143,20 @@ export class WafStack extends Stack {
         },
         visibilityConfig: visibility('rateBlanket'),
       },
+
+      // Addresses AWS has seen attacking, and payloads that are exploits by
+      // shape (Log4j lookups, Java deserialization, probes for exploitable
+      // paths). Neither matches anything the app sends, so both block.
+      managed('aws-ip-reputation', 4, 'AWSManagedRulesAmazonIpReputationList', true),
+      managed('aws-known-bad-inputs', 5, 'AWSManagedRulesKnownBadInputsRuleSet', true),
+
+      // The broad set counts only. It inspects bodies, and a chat request is
+      // free text carrying the whole conversation: its body size rule alone
+      // would refuse any chat past 8 KB, and its script and path rules can
+      // read an owner's words as an attack. Enforce it once its metrics show
+      // what it would have blocked, with the rules that match the app
+      // overridden to count.
+      managed('aws-common', 6, 'AWSManagedRulesCommonRuleSet', false),
     ];
 
     const webAcl = new CfnWebACL(this, 'AtriusAlbAcl', {
