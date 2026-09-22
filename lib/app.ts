@@ -6,7 +6,6 @@ import { EventBridgeStack } from './eventbridge/eventbridge';
 import { EcrStack } from './ecr/ecr';
 import { EcsStack } from './ecs/ecs';
 import { WafStack } from './waf/waf';
-import { SiteStack } from './site/site';
 import { EodLambdaStack } from './lambda/eodLambda';
 import { IntradayLambdaStack } from './lambda/intradayLambda';
 import { StockResearchLambdaStack } from './lambda/stockResearchLambda';
@@ -17,12 +16,6 @@ const env = {
   account: process.env.CDK_DEFAULT_ACCOUNT,
   region: process.env.CDK_DEFAULT_REGION,
 };
-
-// us-east-1: CloudFront only accepts certificates issued there, whatever region
-// the rest of the stack lives in.
-new SiteStack(app, 'SiteStack', {
-  env: { account: env.account, region: 'us-east-1' },
-});
 
 const s3 = new S3Stack(app, 'S3Stack', { env });
 const sqs = new SqsStack(app, 'SqsStack', { env });
