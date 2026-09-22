@@ -1,6 +1,5 @@
 import { App } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
-import { DdbStack } from '../lib/ddb/ddb';
 import { S3Stack } from '../lib/s3/s3';
 import { EcrStack } from '../lib/ecr/ecr';
 import { SqsStack } from '../lib/sqs/sqs';
@@ -10,7 +9,6 @@ import { RdsStack } from '../lib/rds/rds';
 describe('EcsStack', () => {
   const env = { account: '123456789012', region: 'us-east-1' };
   const app = new App();
-  const ddb = new DdbStack(app, 'TestDdbStack', { env });
   const s3 = new S3Stack(app, 'TestS3Stack', { env });
   const ecr = new EcrStack(app, 'TestEcrStack', { env });
   const sqs = new SqsStack(app, 'TestSqsStack', { env });
@@ -23,19 +21,6 @@ describe('EcsStack', () => {
     databaseSecurityGroup: rds.securityGroup,
     strategiesBucket: s3.strategiesBucket,
     uploadsBucket: s3.uploadsBucket,
-    usersTable: ddb.usersTable,
-    identitiesTable: ddb.identitiesTable,
-    portfoliosTable: ddb.portfoliosTable,
-    positionsTable: ddb.positionsTable,
-    bookPositionsTable: ddb.bookPositionsTable,
-    agentsTable: ddb.agentsTable,
-    activityTable: ddb.activityTable,
-    portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
-    overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
-    portfolioIntradayValueHistoryTable: ddb.portfolioIntradayValueHistoryTable,
-    overviewIntradayValueHistoryTable: ddb.overviewIntradayValueHistoryTable,
-    brokerConnectionsTable: ddb.brokerConnectionsTable,
-    deviceTokensTable: ddb.deviceTokensTable,
     workerQueue: sqs.workerQueue,
   });
   const template = Template.fromStack(stack);
@@ -132,15 +117,13 @@ describe('EcsStack', () => {
     });
   });
 
-  test('task role has DynamoDB read/write permissions', () => {
+  test('task role reaches no DynamoDB table, and no scheduler', () => {
     const policies = {
       ...template.findResources('AWS::IAM::Policy'),
       ...template.findResources('AWS::IAM::ManagedPolicy'),
     };
     const policyJson = JSON.stringify(policies);
-    expect(policyJson).toContain('dynamodb:PutItem');
-    expect(policyJson).toContain('dynamodb:GetItem');
-    expect(policyJson).toContain('dynamodb:UpdateItem');
+    expect(policyJson).not.toContain('dynamodb:');
     expect(policyJson).not.toContain('scheduler:CreateSchedule');
     expect(policyJson).not.toContain('CronJobQueue');
   });
