@@ -1,5 +1,4 @@
 import { App } from 'aws-cdk-lib';
-import { DdbStack } from './ddb/ddb';
 import { RdsStack } from './rds/rds';
 import { S3Stack } from './s3/s3';
 import { SqsStack } from './sqs/sqs';
@@ -25,7 +24,6 @@ new SiteStack(app, 'SiteStack', {
   env: { account: env.account, region: 'us-east-1' },
 });
 
-const ddb = new DdbStack(app, 'DdbStack', { env });
 const s3 = new S3Stack(app, 'S3Stack', { env });
 const sqs = new SqsStack(app, 'SqsStack', { env });
 const ecr = new EcrStack(app, 'EcrStack', { env });
@@ -46,19 +44,6 @@ const ecs = new EcsStack(app, 'EcsStack', {
   databaseSecurityGroup: rds.securityGroup,
   strategiesBucket: s3.strategiesBucket,
   uploadsBucket: s3.uploadsBucket,
-  usersTable: ddb.usersTable,
-  identitiesTable: ddb.identitiesTable,
-  portfoliosTable: ddb.portfoliosTable,
-  positionsTable: ddb.positionsTable,
-  bookPositionsTable: ddb.bookPositionsTable,
-  agentsTable: ddb.agentsTable,
-  activityTable: ddb.activityTable,
-  portfolioEodValueHistoryTable: ddb.portfolioEodValueHistoryTable,
-  overviewEodValueHistoryTable: ddb.overviewEodValueHistoryTable,
-  portfolioIntradayValueHistoryTable: ddb.portfolioIntradayValueHistoryTable,
-  overviewIntradayValueHistoryTable: ddb.overviewIntradayValueHistoryTable,
-  brokerConnectionsTable: ddb.brokerConnectionsTable,
-  deviceTokensTable: ddb.deviceTokensTable,
   workerQueue: sqs.workerQueue,
 });
 

@@ -24,7 +24,6 @@ import {
 import { Certificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { DatabaseInstance } from 'aws-cdk-lib/aws-rds';
-import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { FilterPattern, LogGroup, MetricFilter, RetentionDays } from 'aws-cdk-lib/aws-logs';
@@ -53,19 +52,6 @@ interface EcsStackProps extends StackProps {
   repository: Repository;
   strategiesBucket: Bucket;
   uploadsBucket: Bucket;
-  usersTable: Table;
-  identitiesTable: Table;
-  portfoliosTable: Table;
-  positionsTable: Table;
-  bookPositionsTable: Table;
-  agentsTable: Table;
-  activityTable: Table;
-  portfolioEodValueHistoryTable: Table;
-  overviewEodValueHistoryTable: Table;
-  portfolioIntradayValueHistoryTable: Table;
-  overviewIntradayValueHistoryTable: Table;
-  brokerConnectionsTable: Table;
-  deviceTokensTable: Table;
   workerQueue: Queue;
   database: DatabaseInstance;
   databaseCredentials: Secret;
@@ -101,22 +87,6 @@ export class EcsStack extends Stack {
       assumedBy: new ServicePrincipal('ecs-tasks.amazonaws.com'),
     });
 
-    const tables = [
-      props.usersTable,
-      props.identitiesTable,
-      props.portfoliosTable,
-      props.positionsTable,
-      props.bookPositionsTable,
-      props.agentsTable,
-      props.activityTable,
-      props.portfolioEodValueHistoryTable,
-      props.overviewEodValueHistoryTable,
-      props.portfolioIntradayValueHistoryTable,
-      props.overviewIntradayValueHistoryTable,
-      props.brokerConnectionsTable,
-      props.deviceTokensTable,
-    ];
-    tables.forEach((t) => t.grantReadWriteData(taskRole));
     props.strategiesBucket.grantReadWrite(taskRole);
     // One role for both tasks: the API sends the nudge, the worker receives it.
     props.workerQueue.grantSendMessages(taskRole);
