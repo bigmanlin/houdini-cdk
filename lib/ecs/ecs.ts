@@ -427,16 +427,15 @@ export class EcsStack extends Stack {
       }),
     );
 
-    // A provider that changed shape is refused once per read and the morning
-    // canary reads each provider once, so the event is one line, under the
-    // five the error alarm keeps for noise. These lines page on their own.
+    // A provider that changed shape is refused once per read, so the event is
+    // one line, under the five the error alarm keeps for noise. These lines
+    // page on their own.
     const providerLines = new MetricFilter(this, 'ProviderLines', {
       logGroup,
       metricNamespace: 'Atrius',
       metricName: 'ProviderLines',
       filterPattern: FilterPattern.any(
         FilterPattern.stringValue('$.message', '=', "A provider answered in a shape we don't read"),
-        FilterPattern.stringValue('$.message', '=', 'Provider canary failed'),
         FilterPattern.stringValue('$.message', '=', 'Quote stream silent'),
       ),
       metricValue: '1',
