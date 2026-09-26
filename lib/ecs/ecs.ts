@@ -28,6 +28,7 @@ import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { FilterPattern, LogGroup, MetricFilter, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
+import { AlertDigest } from './alertDigest';
 
 // The API's DNS lives at Cloudflare, not Route 53, so the certificate is issued
 // outside the stack and referenced by ARN; nothing here writes a DNS record.
@@ -300,6 +301,10 @@ export class EcsStack extends Stack {
       topicName: 'atrius-alarms',
       displayName: 'Atrius production',
     });
+
+    // The mail a person reads is the digest's, on its own topic: the alarm
+    // with the error lines behind it, rather than CloudWatch's bare text.
+    new AlertDigest(this, 'AlertDigest', { alarms, logGroup });
 
     const notify = (alarm: Alarm) => alarm.addAlarmAction(new SnsAction(alarms));
 
