@@ -436,6 +436,7 @@ export class EcsStack extends Stack {
       metricName: 'ProviderLines',
       filterPattern: FilterPattern.any(
         FilterPattern.stringValue('$.message', '=', "A provider answered in a shape we don't read"),
+        FilterPattern.stringValue('$.message', '=', 'Venue order schema drifted'),
         FilterPattern.stringValue('$.message', '=', 'Quote stream silent'),
       ),
       metricValue: '1',
