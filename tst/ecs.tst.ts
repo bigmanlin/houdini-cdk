@@ -143,4 +143,21 @@ describe('EcsStack', () => {
       Scheme: 'internet-facing',
     });
   });
+
+  test('an alarm invokes the digest, which reads the log group and mails the alerts topic', () => {
+    template.hasResourceProperties('AWS::SNS::Topic', { TopicName: 'atrius-alerts' });
+    template.hasResourceProperties('AWS::Lambda::Function', {
+      FunctionName: 'atrius-alert-digest',
+      Runtime: 'nodejs22.x',
+      Timeout: 60,
+      MemorySize: 256,
+    });
+    template.hasResourceProperties('AWS::SNS::Subscription', {
+      Protocol: 'lambda',
+      TopicArn: { Ref: Match.stringLikeRegexp('AtriusAlarms') },
+    });
+    const policies = JSON.stringify(template.findResources('AWS::IAM::Policy'));
+    expect(policies).toContain('logs:FilterLogEvents');
+    expect(policies).toContain('sns:Publish');
+  });
 });
