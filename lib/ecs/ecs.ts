@@ -10,7 +10,7 @@ import {
 } from 'aws-cdk-lib/aws-ecs';
 import { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
 import { ApplicationProtocol, HttpCodeTarget } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
-import { Alarm, ComparisonOperator, TreatMissingData } from 'aws-cdk-lib/aws-cloudwatch';
+import { Alarm, ComparisonOperator, Metric, TreatMissingData } from 'aws-cdk-lib/aws-cloudwatch';
 import { SnsAction } from 'aws-cdk-lib/aws-cloudwatch-actions';
 import { Topic } from 'aws-cdk-lib/aws-sns';
 import { Repository } from 'aws-cdk-lib/aws-ecr';
@@ -26,7 +26,7 @@ import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { DatabaseInstance } from 'aws-cdk-lib/aws-rds';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
-import { FilterPattern, LogGroup, MetricFilter, RetentionDays } from 'aws-cdk-lib/aws-logs';
+import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import { AlertDigest } from './alertDigest';
 
@@ -308,6 +308,17 @@ export class EcsStack extends Stack {
 
     const notify = (alarm: Alarm) => alarm.addAlarmAction(new SnsAction(alarms));
 
+    // The application publishes its own counts, as embedded metric format
+    // lines in its log. An alarm names the metric and nothing here has to
+    // know which log sentence stands for the event.
+    const counted = (metricName: string) =>
+      new Metric({
+        namespace: 'Atrius',
+        metricName,
+        period: Duration.minutes(5),
+        statistic: 'Sum',
+      });
+
     notify(
       new Alarm(this, 'ApiErrors', {
         alarmName: 'atrius-api-5xx',
@@ -345,25 +356,14 @@ export class EcsStack extends Stack {
 
     // The worker owns time: if its minute tick stops, no agent trades again and
     // nothing else says so. ECS replaces the task only when the process exits,
-    // so a wedged event loop stays RUNNING and healthy forever. The tick logs
-    // one line a minute whether or not anything is due, which is the only thing
-    // absence can be measured against.
-    const workerTicks = new MetricFilter(this, 'WorkerTicks', {
-      logGroup,
-      metricNamespace: 'Atrius',
-      metricName: 'WorkerTicks',
-      filterPattern: FilterPattern.stringValue('$.message', '=', 'Worker tick'),
-      metricValue: '1',
-    });
-
+    // so a wedged event loop stays RUNNING and healthy forever. The tick counts
+    // itself once a minute whether or not anything is due, which is the only
+    // thing absence can be measured against.
     notify(
       new Alarm(this, 'WorkerStopped', {
         alarmName: 'atrius-worker-stopped',
         alarmDescription: 'The worker clock has stopped. No agent is trading.',
-        metric: workerTicks.metric({
-          period: Duration.minutes(5),
-          statistic: 'Sum',
-        }),
+        metric: counted('WorkerTicks'),
         // Three of five, because a deploy stops the single worker task before
         // starting its replacement and the gap runs to about ninety seconds.
         threshold: 3,
@@ -378,22 +378,11 @@ export class EcsStack extends Stack {
     // The tick holds a flag while it runs and clears it in a finally, so one
     // blocked call means every later minute is skipped. Distinct from a dead
     // worker, and fixed differently.
-    const overruns = new MetricFilter(this, 'TickOverruns', {
-      logGroup,
-      metricNamespace: 'Atrius',
-      metricName: 'TickOverruns',
-      filterPattern: FilterPattern.stringValue('$.message', '=', 'Tick overran, skipped'),
-      metricValue: '1',
-    });
-
     notify(
       new Alarm(this, 'TickWedged', {
         alarmName: 'atrius-tick-wedged',
         alarmDescription: 'The worker tick is not finishing within its minute.',
-        metric: overruns.metric({
-          period: Duration.minutes(5),
-          statistic: 'Sum',
-        }),
+        metric: counted('TickOverruns'),
         // One overrun is a slow minute. Three is a flag that will not clear.
         threshold: 3,
         evaluationPeriods: 1,
@@ -402,24 +391,13 @@ export class EcsStack extends Stack {
       }),
     );
 
-    // The one that would have caught the chart bug in minutes: the app logs one
-    // JSON object per line, so its own error level is a metric.
-    const errorLines = new MetricFilter(this, 'ErrorLines', {
-      logGroup,
-      metricNamespace: 'Atrius',
-      metricName: 'ErrorLines',
-      filterPattern: FilterPattern.stringValue('$.level', '=', 'error'),
-      metricValue: '1',
-    });
-
+    // The one that would have caught the chart bug in minutes: every error
+    // the app logs counts itself.
     notify(
       new Alarm(this, 'LoggedErrors', {
         alarmName: 'atrius-logged-errors',
         alarmDescription: 'The application logged errors.',
-        metric: errorLines.metric({
-          period: Duration.minutes(5),
-          statistic: 'Sum',
-        }),
+        metric: counted('ErrorLines'),
         threshold: 5,
         evaluationPeriods: 1,
         comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
@@ -428,29 +406,14 @@ export class EcsStack extends Stack {
     );
 
     // A provider that changed shape is refused once per read, so the event is
-    // one line, under the five the error alarm keeps for noise. These lines
-    // page on their own.
-    const providerLines = new MetricFilter(this, 'ProviderLines', {
-      logGroup,
-      metricNamespace: 'Atrius',
-      metricName: 'ProviderLines',
-      filterPattern: FilterPattern.any(
-        FilterPattern.stringValue('$.message', '=', "A provider answered in a shape we don't read"),
-        FilterPattern.stringValue('$.message', '=', 'Venue order schema drifted'),
-        FilterPattern.stringValue('$.message', '=', 'Quote stream silent'),
-      ),
-      metricValue: '1',
-    });
-
+    // one count, under the five the error alarm keeps for noise. It pages on
+    // its own.
     notify(
       new Alarm(this, 'ProviderChanged', {
         alarmName: 'atrius-provider-changed',
         alarmDescription:
           'A market data or brokerage provider answered in a shape the server does not read, or stopped answering.',
-        metric: providerLines.metric({
-          period: Duration.minutes(5),
-          statistic: 'Sum',
-        }),
+        metric: counted('ProviderChanges'),
         threshold: 1,
         evaluationPeriods: 1,
         comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
