@@ -311,11 +311,11 @@ export class EcsStack extends Stack {
     // The application publishes its own counts, as embedded metric format
     // lines in its log. An alarm names the metric and nothing here has to
     // know which log sentence stands for the event.
-    const counted = (metricName: string) =>
+    const counted = (metricName: string, period = Duration.minutes(5)) =>
       new Metric({
         namespace: 'Atrius',
         metricName,
-        period: Duration.minutes(5),
+        period,
         statistic: 'Sum',
       });
 
@@ -415,6 +415,48 @@ export class EcsStack extends Stack {
           'A market data or brokerage provider answered in a shape the server does not read, or stopped answering.',
         metric: counted('ProviderChanges'),
         threshold: 1,
+        evaluationPeriods: 1,
+        comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+      }),
+    );
+
+    // A program is handed an empty table when its provider does not answer,
+    // and trades on nothing when a provider answers empty. Neither is an
+    // error line; each is a count, and a burst of either is a provider down.
+    notify(
+      new Alarm(this, 'TablesUnavailable', {
+        alarmName: 'atrius-tables-unavailable',
+        alarmDescription: 'Programs are being handed empty tables because a provider did not answer.',
+        metric: counted('UnavailableReads'),
+        threshold: 3,
+        evaluationPeriods: 1,
+        comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+      }),
+    );
+
+    notify(
+      new Alarm(this, 'TablesEmpty', {
+        alarmName: 'atrius-tables-empty',
+        alarmDescription: 'Tables are answering programs with no rows.',
+        metric: counted('EmptyReads', Duration.minutes(15)),
+        threshold: 5,
+        evaluationPeriods: 1,
+        comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+      }),
+    );
+
+    // A field the app only shows, reshaped by a provider, reads as a blank
+    // rather than refusing the answer. One is a stray row; a run of them is
+    // the provider having changed something we will want to read again.
+    notify(
+      new Alarm(this, 'ProviderBlanks', {
+        alarmName: 'atrius-provider-blanks',
+        alarmDescription: 'A provider is sending a field the app shows in a shape the server does not read.',
+        metric: counted('ProviderBlanks', Duration.minutes(15)),
+        threshold: 10,
         evaluationPeriods: 1,
         comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
         treatMissingData: TreatMissingData.NOT_BREACHING,
