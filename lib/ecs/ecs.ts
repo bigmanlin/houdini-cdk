@@ -391,6 +391,37 @@ export class EcsStack extends Stack {
       }),
     );
 
+    // A tick is named for the minute it was armed for and serves any minute
+    // left unserved since the last one, so a minute can only be lost when the
+    // worker was away longer than its catch-up window. One is a run that never
+    // happened and nothing else says so.
+    notify(
+      new Alarm(this, 'TicksLost', {
+        alarmName: 'atrius-ticks-lost',
+        alarmDescription:
+          'A minute of the worker clock was never served, and any run due in it never ran.',
+        metric: counted('TicksLost'),
+        threshold: 1,
+        evaluationPeriods: 1,
+        comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+      }),
+    );
+
+    // A minute served late was still served. One is a slow minute; a run of
+    // them is a worker that cannot keep up.
+    notify(
+      new Alarm(this, 'TicksLate', {
+        alarmName: 'atrius-ticks-late',
+        alarmDescription: 'The worker is serving minutes late: it is not keeping up with its clock.',
+        metric: counted('TicksLate', Duration.minutes(15)),
+        threshold: 5,
+        evaluationPeriods: 1,
+        comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+      }),
+    );
+
     // The one that would have caught the chart bug in minutes: every error
     // the app logs counts itself.
     notify(
