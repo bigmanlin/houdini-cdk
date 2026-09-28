@@ -49,6 +49,10 @@ const ROBINHOOD_REDIRECT_URI = 'http://localhost:8080/callback';
 // and no delivery.
 const APNS_BUNDLE_ID = 'app.atrius.ios';
 
+// The one account the worker reads the venue on before each open: the owner's
+// own, never a customer's. Empty, the worker never reads the venue on its own.
+const CANARY_USER_ID = '';
+
 interface EcsStackProps extends StackProps {
   repository: Repository;
   strategiesBucket: Bucket;
@@ -138,6 +142,7 @@ export class EcsStack extends Stack {
       AUTH0_AUDIENCE,
       ROBINHOOD_REDIRECT_URI,
       APNS_BUNDLE_ID,
+      CANARY_USER_ID,
       DATABASE_HOST: props.database.dbInstanceEndpointAddress,
       DATABASE_PORT: props.database.dbInstanceEndpointPort,
       DATABASE_NAME: 'atrius',
@@ -457,6 +462,23 @@ export class EcsStack extends Stack {
         alarmDescription: 'A provider is sending a field the app shows in a shape the server does not read.',
         metric: counted('ProviderBlanks', Duration.minutes(15)),
         threshold: 10,
+        evaluationPeriods: 1,
+        comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+      }),
+    );
+
+    // The worker reads the venue on the canary account before each open and
+    // counts every field the record has never seen or seen as another kind.
+    // One is a change at the venue, read or not yet, and it pages before any
+    // customer's screen meets it.
+    notify(
+      new Alarm(this, 'ProviderDrift', {
+        alarmName: 'atrius-provider-drift',
+        alarmDescription:
+          'The venue answered the canary with a field the record has never seen, or seen as another kind.',
+        metric: counted('ProviderDrift', Duration.minutes(15)),
+        threshold: 1,
         evaluationPeriods: 1,
         comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
         treatMissingData: TreatMissingData.NOT_BREACHING,
