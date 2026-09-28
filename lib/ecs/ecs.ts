@@ -86,6 +86,7 @@ export class EcsStack extends Stack {
     );
     const apnsSecret = Secret.fromSecretNameV2(this, 'ApnsSecret', 'atrius/apns');
     const xaiSecret = Secret.fromSecretNameV2(this, 'XaiSecret', 'atrius/xai');
+    const revenueCatSecret = Secret.fromSecretNameV2(this, 'RevenueCatSecret', 'atrius/revenuecat');
 
     // ── IAM ───────────────────────────────────────────────────────────────────
     const taskRole = new Role(this, 'TaskRole', {
@@ -164,6 +165,9 @@ export class EcsStack extends Stack {
       APNS_KEY: EcsSecret.fromSecretsManager(apnsSecret, 'key'),
       APNS_KEY_ID: EcsSecret.fromSecretsManager(apnsSecret, 'keyId'),
       APNS_TEAM_ID: EcsSecret.fromSecretsManager(apnsSecret, 'teamId'),
+      // A task starts only once both fields exist in the secret.
+      REVENUECAT_SECRET_KEY: EcsSecret.fromSecretsManager(revenueCatSecret, 'secretKey'),
+      REVENUECAT_WEBHOOK_SECRET: EcsSecret.fromSecretsManager(revenueCatSecret, 'webhookSecret'),
       // Never an environment variable: a connection string assembled in
       // infrastructure would print the password into the task definition.
       DATABASE_USER: EcsSecret.fromSecretsManager(props.databaseCredentials, 'username'),
