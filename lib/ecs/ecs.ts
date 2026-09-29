@@ -484,6 +484,23 @@ export class EcsStack extends Stack {
       }),
     );
 
+    // A news feed that stops answering hides behind the other feed's
+    // articles: nothing an owner sees changes, and only this count does.
+    // Coverage gaps between the feeds are a weekly count on the dashboard,
+    // not an alarm, since a feed thin on a name is the normal case the second
+    // feed exists for.
+    notify(
+      new Alarm(this, 'FeedFailures', {
+        alarmName: 'atrius-feed-failures',
+        alarmDescription: 'A news feed is not answering, and the other feed is covering for it.',
+        metric: counted('FeedFailures', Duration.hours(1)),
+        threshold: 10,
+        evaluationPeriods: 1,
+        comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+      }),
+    );
+
     // A field the app only shows, reshaped by a provider, reads as a blank
     // rather than refusing the answer. One is a stray row; a run of them is
     // the provider having changed something we will want to read again.
