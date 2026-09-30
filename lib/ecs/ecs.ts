@@ -53,6 +53,17 @@ const APNS_BUNDLE_ID = 'app.atrius.ios';
 // own, never a customer's. Empty, the worker never reads the venue on its own.
 const CANARY_USER_ID = '';
 
+// Worker tasks each serve every minute and take only the runs they have room
+// for, so more tasks, or a larger task with more runs at once, is more room.
+// How many tasks is bounded by the database: every task holds a pool of
+// connections, and four API tasks beside these must stay under the connection
+// alarm.
+const WORKER_TASKS = 1;
+// Programs at a run's usual size, about 100 MB each, fit this many beside the
+// worker process; each is bounded at 256 MB past that, so only several at
+// their ceiling at once would crowd the task.
+const RUN_CAPACITY = 8;
+
 interface EcsStackProps extends StackProps {
   repository: Repository;
   strategiesBucket: Bucket;
@@ -257,10 +268,10 @@ export class EcsStack extends Stack {
     });
 
     // ── Worker ────────────────────────────────────────────────────────────────
-    // The worker owns time: agents' wakes, the intraday valuation, the end of
-    // day pass, and strategy builds all run on its minute clock. Same image,
-    // same role, same env; only the command differs. It answers no requests,
-    // so it sits behind no load balancer. It runs around the clock because an
+    // The workers own time: agents' runs, the intraday valuation, the end of
+    // day pass, and strategy builds all run on their minute clock. Same image,
+    // same role, same env; only the command differs. They answer no requests,
+    // so they sit behind no load balancer. They run around the clock because an
     // owner deploys at any hour and the build must land before the next open.
     const workerTaskDefinition = new FargateTaskDefinition(this, 'WorkerTaskDef', {
       family: 'atrius-worker',
@@ -273,19 +284,28 @@ export class EcsStack extends Stack {
     workerTaskDefinition.addContainer('WorkerContainer', {
       image,
       command: ['node', 'dist/worker.js'],
-      environment: containerEnvironment,
+      environment: {
+        ...containerEnvironment,
+        RUN_CAPACITY: String(RUN_CAPACITY),
+      },
       secrets: containerSecrets,
       logging: LogDrivers.awsLogs({ logGroup, streamPrefix: 'worker' }),
+      // A stopping worker takes nothing new and waits up to a hundred seconds
+      // for its runs to end; a run cut first strands the sells queued behind it.
+      stopTimeout: Duration.seconds(120),
     });
 
-    // One task, never two: a second worker would wake every agent twice.
+    // Every task serves every minute and takes each run by a lease, so tasks
+    // may overlap: a deploy starts the new one before stopping the old, and
+    // the clock never stops for it.
     const worker = new FargateService(this, 'AtriusWorker', {
       cluster,
       serviceName: 'AtriusWorker',
       taskDefinition: workerTaskDefinition,
-      desiredCount: 1,
-      minHealthyPercent: 0,
-      maxHealthyPercent: 100,
+      desiredCount: WORKER_TASKS,
+      minHealthyPercent: 100,
+      maxHealthyPercent: 200,
+      circuitBreaker: { rollback: true },
       assignPublicIp: true,
       vpcSubnets: { subnetType: SubnetType.PUBLIC },
     });
@@ -363,19 +383,20 @@ export class EcsStack extends Stack {
       }),
     );
 
-    // The worker owns time: if its minute tick stops, no agent trades again and
-    // nothing else says so. ECS replaces the task only when the process exits,
-    // so a wedged event loop stays RUNNING and healthy forever. The tick counts
-    // itself once a minute whether or not anything is due, which is the only
-    // thing absence can be measured against.
+    // The workers own time: if a task's minute tick stops, the runs it would
+    // have taken wait on the others and nothing else says so. ECS replaces a
+    // task only when its process exits, so a wedged event loop stays RUNNING
+    // and healthy forever. Each tick counts itself once a minute whether or not
+    // anything is due, which is the only thing absence can be measured against.
     notify(
       new Alarm(this, 'WorkerStopped', {
         alarmName: 'atrius-worker-stopped',
-        alarmDescription: 'The worker clock has stopped. No agent is trading.',
+        alarmDescription: 'A worker clock has stopped. Runs are left to fewer tasks, or to none.',
         metric: counted('WorkerTicks'),
-        // Three of five, because a deploy stops the single worker task before
-        // starting its replacement and the gap runs to about ninety seconds.
-        threshold: 3,
+        // Five a task in five minutes. A task missing a whole window's ticks
+        // falls below this; one crash replaced within about ninety seconds
+        // does not, and a deploy overlaps old and new.
+        threshold: WORKER_TASKS * 5 - 2,
         evaluationPeriods: 1,
         comparisonOperator: ComparisonOperator.LESS_THAN_THRESHOLD,
         // No data is the failure, not the absence of one: a worker that has
@@ -401,14 +422,14 @@ export class EcsStack extends Stack {
     );
 
     // A tick is named for the minute it was armed for and serves any minute
-    // left unserved since the last one, so a minute can only be lost when the
-    // worker was away longer than its catch-up window. One is a run that never
-    // happened and nothing else says so.
+    // left unserved since the last one, so a minute can only be lost when a
+    // task was away longer than its catch-up window. When every task lost it,
+    // its runs never ran and no task was there to count them missed.
     notify(
       new Alarm(this, 'TicksLost', {
         alarmName: 'atrius-ticks-lost',
         alarmDescription:
-          'A minute of the worker clock was never served, and any run due in it never ran.',
+          'A worker task lost minutes of its clock. If every task lost them, runs due then never ran.',
         metric: counted('TicksLost'),
         threshold: 1,
         evaluationPeriods: 1,
@@ -425,6 +446,21 @@ export class EcsStack extends Stack {
         alarmDescription: 'The worker is serving minutes late: it is not keeping up with its clock.',
         metric: counted('TicksLate', Duration.minutes(15)),
         threshold: 5,
+        evaluationPeriods: 1,
+        comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+      }),
+    );
+
+    // A run no task had room for before its minute left the catch-up window.
+    // One is an owner's run that did not happen, so one pages: the fix is more
+    // room, a larger task or another one.
+    notify(
+      new Alarm(this, 'RunsMissed', {
+        alarmName: 'atrius-runs-missed',
+        alarmDescription: 'A run due at its minute never ran: no worker task had room for it in time.',
+        metric: counted('RunsMissed'),
+        threshold: 1,
         evaluationPeriods: 1,
         comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
         treatMissingData: TreatMissingData.NOT_BREACHING,
