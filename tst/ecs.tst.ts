@@ -81,16 +81,36 @@ describe('EcsStack', () => {
     });
   });
 
-  test('the worker runs as exactly one task around the clock', () => {
+  // Tasks take each run by a lease, so they may overlap: a deploy starts the
+  // new tasks before it stops the old, and the clock never stops for it.
+  test('the workers run as a fixed number of overlapping tasks around the clock', () => {
     template.hasResourceProperties('AWS::ECS::Service', {
       ServiceName: 'AtriusWorker',
       DesiredCount: 1,
+      DeploymentConfiguration: Match.objectLike({
+        MinimumHealthyPercent: 100,
+        MaximumPercent: 200,
+      }),
     });
     const targets = template.findResources('AWS::ApplicationAutoScaling::ScalableTarget');
     const workerTargets = Object.values(targets).filter((target) =>
       JSON.stringify(target).includes('AtriusWorker'),
     );
     expect(workerTargets).toHaveLength(0);
+  });
+
+  // A stopping worker waits for its runs before it exits.
+  test('a worker is given time to finish its runs and told how many to take', () => {
+    template.hasResourceProperties('AWS::ECS::TaskDefinition', {
+      Family: 'atrius-worker',
+      Memory: '2048',
+      ContainerDefinitions: Match.arrayWith([
+        Match.objectLike({
+          StopTimeout: 120,
+          Environment: Match.arrayWith([{ Name: 'RUN_CAPACITY', Value: '8' }]),
+        }),
+      ]),
+    });
   });
 
   test('no task carries queue or scheduler settings any more', () => {
