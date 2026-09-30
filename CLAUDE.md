@@ -28,6 +28,11 @@ service repo.
 - **Removing a stack from `app.ts` does not delete the deployed stack.** It only
   stops managing it. Deleting requires an explicit `cdk destroy`, and forgetting
   leaves resources running and billing.
+- **The API certificate's validation record at Cloudflare is never deleted.** The
+  domain's DNS lives at Cloudflare, so nothing here writes a record, and the
+  certificate renews by DNS validation: without the record it silently fails to
+  renew. Renewal is attempted well before expiry, so a record deleted today fails
+  only at that attempt, which can be most of a year of everything looking correct.
 
 ## Ordering
 
