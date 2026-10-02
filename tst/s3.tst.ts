@@ -1,5 +1,5 @@
 import { App } from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
+import { Match, Template } from 'aws-cdk-lib/assertions';
 import { S3Stack } from '../lib/s3/s3';
 
 describe('S3Stack', () => {
@@ -20,14 +20,30 @@ describe('S3Stack', () => {
   test('strategies bucket expires the reads store after ninety days', () => {
     template.hasResourceProperties('AWS::S3::Bucket', {
       LifecycleConfiguration: {
-        Rules: [
+        Rules: Match.arrayWith([
           {
             Prefix: 'reads/',
             Status: 'Enabled',
             ExpirationInDays: 90,
             NoncurrentVersionExpiration: { NoncurrentDays: 1 },
           },
-        ],
+        ]),
+      },
+    });
+  });
+
+  // A delete or a move can be undone for a month; after that an erased
+  // owner's files are gone for good.
+  test('strategies bucket keeps old versions of everything else for a month', () => {
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      LifecycleConfiguration: {
+        Rules: Match.arrayWith([
+          Match.objectLike({
+            Status: 'Enabled',
+            NoncurrentVersionExpiration: { NoncurrentDays: 30 },
+            ExpiredObjectDeleteMarker: true,
+          }),
+        ]),
       },
     });
   });

@@ -14,6 +14,13 @@ export class S3Stack extends Stack {
     // Postgres and outlives them. Ninety days covers every replay anyone asks
     // for. Versioned buckets expire the current version and keep it as a
     // noncurrent one, so the rule expires those too.
+    //
+    // Everything else keeps its old versions for a month: long enough to undo
+    // a move or a delete made in error, and short enough that an owner who
+    // erased their account is really gone. A delete leaves a marker behind
+    // once its versions have expired, and that goes too. Where two rules
+    // reach a version, S3 applies the earlier expiry, so the reads store
+    // keeps its one day.
     this.strategiesBucket = new Bucket(this, 'StrategiesBucket', {
       bucketName: `houdini-strategies-${this.account}-${this.region}`,
       versioned: true,
@@ -26,6 +33,10 @@ export class S3Stack extends Stack {
           prefix: 'reads/',
           expiration: Duration.days(90),
           noncurrentVersionExpiration: Duration.days(1),
+        },
+        {
+          noncurrentVersionExpiration: Duration.days(30),
+          expiredObjectDeleteMarker: true,
         },
       ],
     });
